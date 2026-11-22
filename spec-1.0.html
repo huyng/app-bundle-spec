@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="A filesystem convention for self-contained applications: one directory per app, copy to install, delete to uninstall.">
+<title>App Bundle Layout Specification v1.0</title>
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --bg-elev: #ffffff;
+    --bg-sunken: #f2f1ec;
+    --fg: #17191c;
+    --fg-soft: #3b4047;
+    --muted: #6d7279;
+    --line: #e3e0d8;
+    --line-strong: #cbc7bc;
+    --accent: #2d4fce;
+    --accent-soft: #eef1fd;
+    --code-bg: #f4f3ee;
+    --code-head: #eeece5;
+    --code-fg: #23262b;
+    --note-bg: #f1f4fe;
+    --note-edge: #2d4fce;
+    --radius: 10px;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101216;
+      --bg-elev: #171a1f;
+      --bg-sunken: #1a1e24;
+      --fg: #eceef1;
+      --fg-soft: #c3c8d0;
+      --muted: #8f96a1;
+      --line: #272c34;
+      --line-strong: #3a414c;
+      --accent: #9ab5ff;
+      --accent-soft: #1a2337;
+      --code-bg: #15181d;
+      --code-head: #1a1e24;
+      --code-fg: #d9dee6;
+      --note-bg: #161d2b;
+      --note-edge: #6f92ff;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg-soft);
+    font: 400 16.5px/1.68 var(--sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent); color: var(--bg-elev); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+  a { color: var(--accent); text-decoration-thickness: .07em; text-underline-offset: .18em; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .topbar-inner {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: .65rem 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    color: var(--fg);
+    text-decoration: none;
+  }
+  .brand:hover { text-decoration: none; }
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--bg-elev);
+    font: 700 .8rem/1 var(--mono);
+  }
+  .brand-name {
+    font: 600 .76rem/1 var(--sans);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .chip {
+    margin-left: auto;
+    padding: .25rem .55rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    font: 600 .68rem/1 var(--mono);
+    letter-spacing: .06em;
+    white-space: nowrap;
+  }
+
+  /* ---------- page shell ---------- */
+  .page {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 0 1.75rem;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 41rem);
+    column-gap: 4.25rem;
+    align-items: start;
+    padding-bottom: 4.5rem;
+  }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 4.5rem 0 2.8rem; }
+  .eyebrow {
+    margin: 0 0 1.1rem;
+    color: var(--accent);
+    font: 650 .7rem/1 var(--sans);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    color: var(--fg);
+    font-size: clamp(2rem, 4.2vw, 2.9rem);
+    line-height: 1.06;
+    letter-spacing: -.025em;
+    font-weight: 680;
+    text-wrap: balance;
+  }
+  .release {
+    display: inline-block;
+    margin: 1.2rem 0 1.1rem;
+    padding: .32rem .7rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    font: 600 .7rem/1 var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .lede {
+    margin: 0;
+    max-width: 44rem;
+    color: var(--fg-soft);
+    font-size: 1.08rem;
+    line-height: 1.62;
+  }
+
+  /* ---------- contents sidebar ---------- */
+  .toc {
+    position: sticky;
+    top: 4.5rem;
+    max-height: calc(100vh - 7rem);
+    overflow-y: auto;
+    padding: 0 0 1rem;
+    font-size: .86rem;
+    line-height: 1.4;
+  }
+  .toc-title {
+    margin: 0 0 .7rem;
+    color: var(--muted);
+    font: 650 .67rem/1 var(--sans);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  .toc ol, .toc ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .toc .appendix {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+  }
+  .toc ol > li > a { counter-increment: section; }
+  .toc ol { counter-reset: section; }
+  .toc ol > li > a::before {
+    content: counter(section) ".";
+    display: inline-block;
+    min-width: 1.5em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .toc a {
+    display: block;
+    padding: .24rem .5rem .24rem .55rem;
+    border-left: 2px solid transparent;
+    border-radius: 0 5px 5px 0;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color .12s ease, background-color .12s ease;
+  }
+  .toc a:hover {
+    background: var(--bg-sunken);
+    color: var(--fg);
+  }
+  .toc a.active {
+    border-left-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .toc a { transition: none; }
+  }
+
+  /* ---------- headings ---------- */
+  h2 {
+    position: relative;
+    margin: 3.4rem 0 1rem;
+    padding-top: 1.3rem;
+    border-top: 1px solid var(--line);
+    color: var(--fg);
+    font-size: 1.45rem;
+    line-height: 1.25;
+    letter-spacing: -.015em;
+    font-weight: 660;
+    text-wrap: balance;
+    scroll-margin-top: 3.75rem;
+  }
+  h2::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 3rem;
+    height: 2px;
+    background: var(--accent);
+  }
+  h3 {
+    margin: 2rem 0 .55rem;
+    color: var(--fg);
+    font-size: 1.01rem;
+    line-height: 1.4;
+    font-weight: 650;
+    scroll-margin-top: 3.75rem;
+  }
+  li[id] { scroll-margin-top: 3.5rem; }
+
+  /* ---------- prose ---------- */
+  p { margin: 0 0 1rem; }
+  strong { color: var(--fg); font-weight: 640; }
+  ul, ol { margin: .6rem 0 1.15rem; padding-left: 1.35rem; }
+  li { margin: .32rem 0; padding-left: .1rem; }
+  li::marker { color: var(--muted); }
+  li > ul, li > ol { margin: .35rem 0 .4rem; }
+
+  /* ---------- code ---------- */
+  code {
+    font-family: var(--mono);
+    font-size: .87em;
+    color: var(--code-fg);
+    background: var(--code-bg);
+    padding: .1em .34em;
+    border-radius: 5px;
+    overflow-wrap: break-word;
+  }
+  pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; color: inherit; }
+  pre { margin: 0; }
+
+  .code {
+    margin: 1.3rem 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--code-bg);
+    overflow: hidden;
+  }
+  .code[data-lang]::before {
+    content: attr(data-lang);
+    display: block;
+    padding: .5rem 1.1rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--code-head);
+    color: var(--muted);
+    font: 650 .66rem/1 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .code pre {
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    font: .84rem/1.58 var(--mono);
+    color: var(--code-fg);
+    tab-size: 4;
+  }
+
+  /* ---------- directory tree ---------- */
+  .tree-figure { margin: 1.3rem 0; }
+  .tree {
+    padding: 1.1rem 1.2rem;
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--code-fg);
+    font: .84rem/1.75 var(--mono);
+    white-space: pre;
+  }
+  .tree .t-root { color: var(--fg); font-weight: 600; }
+  .tree .t-c { color: var(--muted); }
+
+  /* ---------- tables ---------- */
+  .table-wrap { margin: 1.3rem 0; overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .92rem;
+    line-height: 1.5;
+  }
+  th, td {
+    padding: .55rem .7rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+  th:first-child, td:first-child { padding-left: 0; }
+  th:last-child, td:last-child { padding-right: 0; }
+  thead th {
+    border-bottom: 1px solid var(--line-strong);
+    color: var(--muted);
+    font: 650 .68rem/1.3 var(--sans);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--bg-sunken); }
+  table.mono td:first-child,
+  table.mono th:first-child { font-family: var(--mono); font-size: .88em; }
+  td code { white-space: nowrap; }
+
+  /* ---------- notes ---------- */
+  .note {
+    margin: 1.6rem 0;
+    padding: .95rem 1.2rem 1rem;
+    border-left: 3px solid var(--note-edge);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--note-bg);
+    font-size: .95rem;
+  }
+  .note::before {
+    content: "Note";
+    display: block;
+    margin-bottom: .6rem;
+    color: var(--accent);
+    font: 700 .64rem/1 var(--sans);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  .note p { margin: 0 0 .65rem; }
+  .note p:last-child { margin-bottom: 0; }
+  .note code { background: color-mix(in srgb, var(--bg-elev) 55%, transparent); }
+
+  /* ---------- cross references ---------- */
+  a.xref {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-decoration-thickness: .05em;
+    text-underline-offset: .18em;
+  }
+  a.xref:hover { color: var(--accent); text-decoration-color: var(--accent); text-decoration-thickness: .06em; }
+
+  /* ---------- separators & footer ---------- */
+  .footer {
+    margin-top: 3.5rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: .83rem;
+  }
+  .footer p { margin: 0 0 .6rem; }
+  .footer a { color: var(--muted); text-decoration: none; }
+  .footer a:hover { color: var(--accent); }
+
+  /* ---------- narrow screens ---------- */
+  @media (max-width: 899px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+      padding-bottom: 0;
+    }
+    .toc {
+      position: static;
+      max-height: none;
+      overflow: visible;
+      margin: 0 0 2.5rem;
+      padding: 0 0 1.25rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .toc ol, .toc ul { columns: 2; column-gap: 2rem; }
+    .toc .appendix {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .toc li { break-inside: avoid; }
+    h2 { scroll-margin-top: 1rem; }
+    h3 { scroll-margin-top: 1rem; }
+    li[id] { scroll-margin-top: 1rem; }
+  }
+  @media (max-width: 640px) {
+    .page { padding: 0 1.25rem; }
+    .topbar-inner { padding: .6rem 1.25rem; }
+    .hero { padding: 3rem 0 2rem; }
+    .toc ol, .toc ul { columns: 1; }
+  }
+  @media (max-width: 420px) {
+    body { font-size: 16px; }
+    h1 { font-size: 1.8rem; }
+  }
+
+  /* ---------- print ---------- */
+  @media print {
+    :root {
+      --bg: #fff;
+      --bg-elev: #fff;
+      --bg-sunken: #f7f7f7;
+      --fg: #000;
+      --fg-soft: #1c1c1c;
+      --muted: #555;
+      --line: #ccc;
+      --line-strong: #999;
+      --accent: #000;
+      --code-bg: #f6f6f6;
+      --code-head: #f0f0f0;
+      --note-bg: #f7f7f7;
+      --note-edge: #999;
+    }
+    body { font-size: 10.5pt; }
+    .topbar { display: none; }
+    .page { max-width: none; padding: 0; }
+    .layout { display: block; padding: 0; }
+    .toc { display: none; }
+    .hero { padding-top: 0; }
+    a { color: inherit; text-decoration: none; }
+    h2, h3 { break-after: avoid; }
+    .code, .tree, table, .note, .toc { break-inside: avoid; }
+  }
+</style>
+</head>
+<body id="top">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <span class="brand-name">App Bundle Layout</span>
+    </a>
+    <span class="chip">v1.0</span>
+  </div>
+</header>
+
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">Filesystem convention</p>
+    <h1>App Bundle Layout Specification</h1>
+    <p class="release">Version 1.0</p>
+    <p class="lede">A filesystem convention for self-contained applications. An app is one directory. Copying it is installation; deleting it is uninstallation. The same layout applies to desktop apps, command-line tools, and daemons, at user or system scope.</p>
+  </header>
+
+  <div class="layout">
+
+    <nav class="toc" aria-label="Contents">
+      <p class="toc-title">Contents</p>
+      <ol>
+        <li><a href="#s1">App root</a></li>
+        <li><a href="#s2">Manifest (app.toml)</a></li>
+        <li><a href="#s3">Runtime path resolution</a></li>
+        <li><a href="#s4">Mutable directories</a></li>
+        <li><a href="#s5">In-code convention</a></li>
+        <li><a href="#s6">Packaging</a></li>
+        <li><a href="#s7">Installation</a></li>
+        <li><a href="#s8">Upgrading</a></li>
+        <li><a href="#s9">Daemons</a></li>
+        <li><a href="#s10">Relationship to other formats</a></li>
+        <li><a href="#s11">What this specification does not define</a></li>
+        <li><a href="#s12">Conformance</a></li>
+      </ol>
+      <ul class="appendix">
+        <li><a href="#appa">Appendix A — Reference path modules</a></li>
+        <li><a href="#appb">Appendix B — Bundle templates</a></li>
+        <li><a href="#appc">Appendix C — Reference installer</a></li>
+      </ul>
+    </nav>
+
+    <article>
+
+    <h2 id="s1">1. App root</h2>
+    <p>Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory (<a class="xref" href="#s3.4">§3.4</a>) or the app declares a write location outside the root (<a class="xref" href="#s1.4">§1.4</a>).</p>
+
+    <h3 id="s1.1">1.1 Scope</h3>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th><th scope="col">Owner</th></tr></thead>
+        <tbody>
+          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td><td>the user</td></tr>
+          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td><td>root or a dedicated service user</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The internal layout (<a class="xref" href="#s1.2">§1.2</a>) is identical at both scopes.</li>
+      <li>Base paths are overridable: <code>$APP_HOME</code> replaces <code>~/.apps</code>, <code>$APP_SYSTEM_HOME</code> replaces <code>/opt/apps</code>. The <code>&lt;id&gt;</code> segment and the internal layout are unchanged.</li>
+      <li>A system-scope app MUST NOT write into any user's <code>~/.apps/</code>. A per-user app MUST NOT write into <code>/opt/apps/</code>.</li>
+      <li>Scope is declared, not inferred. See <a class="xref" href="#s3">§3</a>.</li>
+    </ul>
+
+    <h3 id="s1.2">1.2 Internal layout</h3>
+  <figure class="tree-figure"><pre class="tree"><span class="t-root">&lt;app-root&gt;/</span>
+├── app.toml          <span class="t-c"># manifest (required); describes the root</span>
+├── contents/         <span class="t-c"># immutable tree (required); replaced wholesale on upgrade</span>
+│   ├── bin/          <span class="t-c">#   executed or exposed files            (convention)</span>
+│   ├── lib/          <span class="t-c">#   libraries and app code               (convention)</span>
+│   └── resources/    <span class="t-c">#   read-only assets                     (convention)</span>
+├── data/             <span class="t-c"># persistent mutable data</span>
+├── cache/            <span class="t-c"># regenerable data</span>
+└── run/              <span class="t-c"># ephemeral; cleared or ignored on startup</span></pre></figure>
+
+    <div class="note">
+      <p><strong>The interior of <code>contents/</code> is a convention, not a requirement.</strong> Only two structural facts are normative: <code>entry</code> (from <code>app.toml</code>) MUST resolve to an executable file inside <code>contents/</code>, and nothing in <code>contents/</code> is written at runtime. A bundle with <code>contents/bin/foo</code> and nothing else conforms. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is the recommended shape for bundles that need it.</p>
+    </div>
+
+    <ul>
+      <li><code>app.toml</code> is at the root because it describes the root. It is replaced on upgrade (<a class="xref" href="#s8">§8</a>) and is never written at runtime.</li>
+      <li><code>contents/</code> is the tree that ships. It is never modified at runtime.</li>
+      <li><code>data/</code>, <code>cache/</code>, and <code>run/</code> are created by the app on first use.</li>
+      <li>The app MUST NOT write outside its app root on its own initiative, except to a write location it declares in <code>app.toml</code> (<a class="xref" href="#s1.4">§1.4</a>). <code>contents/</code> is never written at all.</li>
+    </ul>
+
+    <h3 id="s1.3">1.3 Modes</h3>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Path</th><th scope="col">Per-user</th><th scope="col">System</th></tr></thead>
+        <tbody>
+          <tr><td>root</td><td>0700</td><td>0750, owned by the service user</td></tr>
+          <tr><td>app.toml</td><td>0644</td><td>0644</td></tr>
+          <tr><td>contents/</td><td>0755, read-only at runtime</td><td>0755, read-only at runtime</td></tr>
+          <tr><td>data/</td><td>0700</td><td>0750</td></tr>
+          <tr><td>cache/</td><td>0700</td><td>0750</td></tr>
+          <tr><td>run/</td><td>0700</td><td>0700</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>If clients outside the service group must reach a socket in <code>run/</code>, set the root to <code>0751</code> (traverse-only) and <code>run/</code> to <code>0755</code>. A <code>0755</code> <code>run/</code> under a <code>0750</code> root is unreachable and therefore an error.</p>
+
+    <h3 id="s1.4">1.4 Write discipline</h3>
+    <p>An app writes to two kinds of places: its own, whose location the layout fixes, and the user's, whose location the user names. This section governs what the app writes on its own initiative.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Write target</th><th scope="col">Confined</th><th scope="col">Declared</th></tr></thead>
+        <tbody>
+          <tr><td>a mutable directory in the app root</td><td>yes</td><td>yes</td></tr>
+          <tr><td>a path the user names at runtime</td><td>yes</td><td>yes</td></tr>
+          <tr><td>a fixed path outside the root, listed in <code>writes_outside</code></td><td>no</td><td>yes</td></tr>
+          <tr><td>any other fixed path outside the root</td><td>no</td><td>no</td></tr>
+          <tr><td>inside <code>contents/</code></td><td>never</td><td>never</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li>An app is <strong>confined</strong> when it writes nothing outside its mutable directories and the paths the user names. Deleting the root then deletes every trace of it. This is the default and the recommended discipline.</li>
+      <li>An app has <strong>declared writes</strong> when it also writes to fixed locations outside the root, listed in <code>writes_outside</code> (<a class="xref" href="#s2.2">§2.2</a>). The list is what keeps its reach auditable: every outside location the app owns is named where an installer and a user can read it.</li>
+      <li><strong>A path the user names at runtime is not governed here.</strong> A document passed on the command line, a file chosen in a dialog, a directory an export is written into — these are the user's writes, made at the user's direction, and both disciplines allow them. Reopening the document the user last edited is still user-directed. Copying it into a backup directory on a schedule is not: a write the app makes without being asked must be declared.</li>
+      <li>Confined and declared describe writes only. Reads, network access, and what the app does with the bytes are outside this section.</li>
+    </ul>
+
+    <p>Rules for <code>writes_outside</code>:</p>
+    <ul>
+      <li>Each entry MUST be absolute or start with <code>~/</code>, and MUST NOT be a glob or a relative path. A manifest that violates this is invalid.</li>
+      <li>Each entry MUST NOT be inside the app root; the mutable directories already cover that ground.</li>
+      <li>Entries SHOULD be as narrow as possible: a directory the app owns, not <code>~</code>, <code>~/.config</code>, or <code>/etc</code>.</li>
+      <li>The contents of a declared location are the app's own and opaque (<a class="xref" href="#s11">§11</a>), like <code>data/</code>.</li>
+    </ul>
+
+    <div class="note">
+      <p><strong>The cost of declaring is uninstall.</strong> A confined app is removed by deleting one directory. An app that declares writes cannot be: those locations outlive the root, and removing them is a separate act that only <code>remove --purge</code> performs (<a class="xref" href="#s7">§7</a>). Declare a location when the app genuinely needs one — a document store the user browses, an integration point another program reads — and not merely because the root felt inconvenient.</p>
+    </div>
+
+    <h2 id="s2">2. Manifest (app.toml)</h2>
+    <p>TOML, at the app root. Unknown keys are ignored. All paths in the manifest are relative to the tree root (<code>contents/</code>), regardless of the manifest's own location. Absolute paths are invalid, except in <code>writes_outside</code> (<a class="xref" href="#s1.4">§1.4</a>).</p>
+
+    <h3 id="s2.1">2.1 Required fields</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>string</td><td>Unique identifier (<a class="xref" href="#s2.3">§2.3</a>). Stable across versions. Names the app root.</td></tr>
+          <tr><td><code>name</code></td><td>string</td><td>Human-readable name.</td></tr>
+          <tr><td><code>version</code></td><td>string</td><td>Version string. Opaque to this specification.</td></tr>
+          <tr><td><code>entry</code></td><td>string</td><td>Path to the executable, relative to <code>contents/</code>. MUST resolve to an executable file. MUST be a foreground process.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s2.2">2.2 Optional fields</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>icon</code></td><td>string</td><td>Path to an icon, relative to <code>contents/</code>.</td></tr>
+          <tr><td><code>description</code></td><td>string</td><td>Short description.</td></tr>
+          <tr><td><code>license</code></td><td>string</td><td>SPDX license identifier.</td></tr>
+          <tr><td><code>homepage</code></td><td>string</td><td>URL.</td></tr>
+          <tr><td><code>scope</code></td><td>string</td><td><code>"user"</code> or <code>"system"</code>. The intended installation scope. Installers SHOULD warn when installing at a different scope. Does not affect runtime resolution (<a class="xref" href="#s3">§3</a>).</td></tr>
+          <tr><td><code>writes_outside</code></td><td>array</td><td>Fixed locations outside the app root that the app writes to, absolute or <code>~/</code>-anchored (<a class="xref" href="#s1.4">§1.4</a>). Absent or empty means the app is confined.</td></tr>
+          <tr><td><code>[mime]</code></td><td>table</td><td><code>handles = ["type/subtype", ...]</code> — file types the app opens.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s2.3">2.3 Identity (<code>id</code>)</h3>
+    <ul>
+      <li>MUST be lowercase, dot-separated, at least two segments, and filesystem-safe: <code>a–z</code>, <code>0–9</code>, <code>.</code>, <code>-</code>, <code>_</code>. No <code>/</code>, no spaces, no leading <code>.</code>, no <code>..</code>, no empty segment.</li>
+      <li>SHOULD be a namespace the author controls: a domain in reverse-DNS (<code>org.example.monitord</code>) or a platform handle (<code>github.alice.jsonfmt</code>).</li>
+      <li>MUST be stable across versions. Changing it orphans the app root and all its data.</li>
+      <li><strong><code>id</code> is self-asserted and unverified.</strong> It is a namespace for paths and display, not an identity or authorization claim. Conventions reduce collisions; they do not prevent them. Hosts and installers MUST NOT treat <code>id</code> as proof of authorship.</li>
+    </ul>
+
+    <h3 id="s2.4">2.4 Examples</h3>
+  <figure class="code" data-lang="app.toml"><pre><code>id = "org.example.notepad"
+name = "Notepad"
+version = "1.2.0"
+entry = "bin/notepad"
+icon = "resources/icon.svg"
+scope = "user"</code></pre></figure>
+  <figure class="code" data-lang="app.toml"><pre><code>id = "org.example.monitord"
+name = "monitord"
+version = "0.4.2"
+entry = "bin/monitord"
+scope = "system"</code></pre></figure>
+  <figure class="code" data-lang="app.toml"><pre><code>id = "org.example.notes"
+name = "Notes"
+version = "2.0.1"
+entry = "bin/notes"
+scope = "user"
+writes_outside = ["~/Documents/Notes"]</code></pre></figure>
+    <p>The first two are confined. The third keeps its documents in a folder the user browses, so it declares that folder.</p>
+    <p>The format does not distinguish app types. Desktop apps, command-line tools, and daemons use the same manifest and the same layout. How <code>entry</code> is run — interactively, supervised, socket-activated — is outside this specification.</p>
+    <p><code>entry</code> may be a native executable, a script with an interpreter directive, or a launcher that sets up an interpreted runtime and <code>exec</code>s the interpreter. The manifest does not distinguish these; the launcher is the sanctioned mechanism (<a class="xref" href="#s7.3">§7.3</a>).</p>
+
+    <h2 id="s3">3. Runtime path resolution</h2>
+    <ol>
+      <li>If <code>$APP_ROOT</code> is set and non-empty, it is the app root. The app MUST resolve symlinks and use the real path.</li>
+      <li>Otherwise, scope selects the base:
+        <ul>
+          <li><code>$APP_SCOPE=system</code> → <code>$APP_SYSTEM_HOME</code> or <code>/opt/apps</code></li>
+          <li><code>$APP_SCOPE=user</code>, or unset → <code>$APP_HOME</code> or <code>~/.apps</code></li>
+        </ul>
+        The app root is <code>&lt;base&gt;/&lt;id&gt;/</code>.
+      </li>
+      <li>The tree root is <code>&lt;app-root&gt;/contents/</code>. The manifest is <code>&lt;app-root&gt;/app.toml</code>. All asset access goes through the tree root: <code>resources/&lt;path&gt;</code> is reached as <code>tree_root()/resources/&lt;path&gt;</code>.</li>
+      <li id="s3.4">Each mutable directory MAY be relocated individually by <code>$APP_DATA_DIR</code>, <code>$APP_CACHE_DIR</code>, and <code>$APP_RUN_DIR</code> (absolute paths). Unset means inside the app root. This exists for supervisors that mandate <code>/var/lib/&lt;id&gt;</code>, <code>/var/cache/&lt;id&gt;</code>, and <code>/run/&lt;id&gt;</code>. When used, the app treats them as its mutable directories; the installer MUST also remove them on purge.</li>
+    </ol>
+
+    <div class="note">
+      <p><strong>Scope is declared, never inferred from credentials.</strong> An app MUST NOT use the effective UID to decide between user and system roots. System-scope apps SHOULD be launched through a wrapper that sets <code>$APP_ROOT</code>, or by a supervisor that sets <code>$APP_SCOPE=system</code>; a generated unit file that sets either is sufficient. Apps SHOULD fail with a clear message if neither is set and the root cannot be determined unambiguously.</p>
+    </div>
+
+    <p>Apps MUST resolve symlinks before deriving the root, so a symlinked entry point still finds the real tree. A build that bakes in an absolute install prefix is non-conforming.</p>
+
+    <h2 id="s4">4. Mutable directories</h2>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Purpose</th><th scope="col">Path</th><th scope="col">Lifetime</th><th scope="col">Safe to delete</th></tr></thead>
+        <tbody>
+          <tr><td>Data</td><td>&lt;app-root&gt;/data/</td><td>permanent</td><td>no (loses user data)</td></tr>
+          <tr><td>Cache</td><td>&lt;app-root&gt;/cache/</td><td>until cleaned</td><td>yes (loses time only)</td></tr>
+          <tr><td>Run</td><td>&lt;app-root&gt;/run/</td><td>process/session</td><td>yes (dead already)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The three directories are the complete set of roles that mutable data can play, on two axes:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col"></th><th scope="col">Regenerable</th><th scope="col">Not regenerable</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Session-scoped</strong></td><td><code>run/</code></td><td>— (incoherent)</td></tr>
+          <tr><td><strong>Cross-session</strong></td><td><code>cache/</code></td><td><code>data/</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The fourth quadrant is empty by definition: anything that must survive a restart and cannot be rebuilt is cross-session, not session-scoped. Three directories is therefore the minimum, and no one of them can be removed without collapsing an axis.</p>
+
+    <ul>
+      <li>The app creates these on first use. An app that needs only <code>data/</code> is conforming and never creates the other two.</li>
+      <li><code>run/</code> MUST be cleared or ignored on every startup, so its persistence across reboot is irrelevant. Supervisors that remove it on stop (e.g. systemd's <code>RuntimeDirectory=</code>) provide a stronger guarantee; apps MUST NOT depend on that.</li>
+      <li><code>data/</code> survives reboot, logout, crashes, and upgrades. It is removed only on explicit purge. Its internal structure is the app's own and is opaque to everything else.</li>
+      <li><code>cache/</code> may be deleted at any time without loss of user data. Its internal structure is the app's own.</li>
+    </ul>
+
+    <div class="note">
+      <p><strong>What <code>data/</code> is.</strong> It holds everything the app persists: settings, local databases, indexes, tokens, history, and any files whose lifecycle the app owns. It is the app's durable state, and it is the reason uninstall has two modes (<code>remove</code> keeps it; <code>remove --purge</code> does not).</p>
+      <p>It is not a general-purpose home for user documents. An app that manages files the user considers theirs (notes, projects, photos) SHOULD store them where the user chooses, or at a location it declares in <code>writes_outside</code> (<a class="xref" href="#s1.4">§1.4</a>). Files in <code>data/</code> are expected to be backed up and restored with the app root, not browsed by the user.</p>
+    </div>
+
+    <h2 id="s5">5. In-code convention</h2>
+    <p>Apps SHOULD centralize path logic in one small module:</p>
+    <ul>
+      <li><code>app_root()</code> — per <a class="xref" href="#s3">§3</a>.</li>
+      <li><code>tree_root()</code> — <code>app_root()/contents/</code>.</li>
+      <li><code>resource(path)</code> — <code>tree_root()/resources/&lt;path&gt;</code>.</li>
+      <li><code>data_dir()</code>, <code>cache_dir()</code>, <code>run_dir()</code> — per <a class="xref" href="#s4">§4</a>, created on demand.</li>
+    </ul>
+    <p>Rules:</p>
+    <ul>
+      <li><code>id</code> is a single constant, or generated from <code>app.toml</code> at build time. One source of truth.</li>
+      <li>All asset access goes through <code>resource()</code>. Writes go through the three mutable directories, plus any location listed in <code>writes_outside</code>.</li>
+      <li>Apps MUST NOT hardcode <code>~/.&lt;name&gt;</code>, <code>~/.&lt;id&gt;</code>, or XDG paths.</li>
+      <li><code>entry</code> runs in the foreground. Apps MUST NOT self-daemonize (no fork/setsid/double-fork).</li>
+    </ul>
+    <p>Reference modules per language: <a href="#appa">Appendix A</a>.</p>
+
+    <h2 id="s6">6. Packaging</h2>
+    <ul>
+      <li><strong>Output tree:</strong> a build command (conventionally <code>make bundle</code>) produces <code>build/&lt;id&gt;/</code> containing <code>app.toml</code> and <code>contents/</code>, conforming to <a class="xref" href="#s1.2">§1.2</a> and <a class="xref" href="#s2">§2</a>.</li>
+      <li><strong>Source tree is unconstrained.</strong> The specification says nothing about source layout. Each project's bundle target maps its own sources into <code>build/&lt;id&gt;/</code>. Templates: <a href="#appb">Appendix B</a>.</li>
+      <li><strong>Archive:</strong> canonical <code>.tar.gz</code> (<code>.zip</code> allowed) whose root contains exactly one directory named <code>&lt;id&gt;/</code>, itself containing <code>app.toml</code> and <code>contents/</code>. No install scripts, no post-install hooks, no build-time absolute prefixes.</li>
+      <li><strong>Dependencies are resolved at build time</strong> and shipped flat inside <code>contents/</code>. A bundle MUST NOT resolve its dependencies at runtime, and MUST NOT ship a runtime environment (venv, gem home, node_modules tree with absolute links) that bakes in absolute paths.</li>
+      <li><strong>Dev runs the assembled tree.</strong> The dev command (conventionally <code>make dev</code>) runs <code>bundle</code>, then creates a temporary root with <code>contents/</code> symlinked to the build tree and fresh mutable directories, and executes <code>contents/bin/&lt;entry&gt;</code> with <code>APP_ROOT</code> pointing at it, so the paths exercised in development are the paths that ship.</li>
+    </ul>
+
+    <h2 id="s7">7. Installation</h2>
+    <p>A conforming installer extracts a verified archive to the scope's app root and exposes <code>entry</code>.</p>
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th><th scope="col">Entry exposed as</th></tr></thead>
+        <tbody>
+          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td><td>~/.local/bin/&lt;entry-name&gt; symlink or wrapper</td></tr>
+          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td><td>/usr/local/bin/&lt;entry-name&gt; symlink or wrapper</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>The installer MUST verify the archive conforms before extraction: exactly one <code>&lt;id&gt;/</code> at the archive root, <code>&lt;id&gt;/app.toml</code> present with valid required fields, <code>&lt;id&gt;/contents/&lt;entry&gt;</code> an executable file.</li>
+      <li>Extraction MUST be atomic: unpack to a temp directory under the target parent, then <code>rename()</code> into place.</li>
+      <li>The installer MUST preserve executable bits and symlinks.</li>
+      <li>The installer MUST refuse to overwrite an existing <code>&lt;id&gt;</code> unless <code>--force</code>, and SHOULD warn when the existing manifest's <code>name</code> or <code>entry</code> differs from the new one.</li>
+      <li>The installer MUST refuse to install a bundle whose <code>scope</code> differs from the target scope unless an explicit flag is given.</li>
+      <li>The installer SHOULD name each path in <code>writes_outside</code> when installing or upgrading an app that has them, so the user learns what the app will write before it runs.</li>
+      <li>There are <strong>no install-time scripts</strong>. First-run setup is the app's job.</li>
+      <li>Uninstall removes <code>contents/</code>, <code>cache/</code>, and <code>run/</code>. <code>data/</code> and every path in <code>writes_outside</code> are removed only with explicit purge.</li>
+      <li>Menu entries and MIME registration are out of scope. Hosts MAY derive them from <code>app.toml</code>; nothing requires it.</li>
+    </ul>
+
+    <h3 id="s7.1">7.1 Exposure</h3>
+    <p>The exposed entry may be a symlink to <code>contents/&lt;entry&gt;</code> or a wrapper script that sets <code>APP_ROOT</code> and <code>exec</code>s it. For a native executable, a symlink is sufficient. For an interpreted app, a wrapper is required (<a class="xref" href="#s7.3">§7.3</a>). At system scope, the exposed entry SHOULD be a wrapper that sets <code>$APP_ROOT</code> explicitly, so resolution never depends on the caller's environment.</p>
+
+    <h3 id="s7.2">7.2 What the installer does not do</h3>
+    <p>It does not parse state, run app code, register services, or restart daemons. Its entire job is: verify, extract, swap, link — and, on purge only, delete the outside locations the manifest declares (<a class="xref" href="#s1.4">§1.4</a>).</p>
+
+    <h3 id="s7.3">7.3 Launchers</h3>
+    <p>An interpreted app ships a launcher at <code>entry</code>. The launcher is a script with an interpreter directive, owned by the app, and is responsible for:</p>
+    <ul>
+      <li>deriving <code>APP_ROOT</code> from its own resolved path when it is not already set;</li>
+      <li>putting <code>contents/lib/</code> on the runtime's search path;</li>
+      <li>redirecting any runtime bytecode or compilation cache into <code>cache/</code>;</li>
+      <li><code>exec</code>ing the interpreter so the process is the app, not a shell parent.</li>
+    </ul>
+    <p>The launcher is the only file that must be executable in an interpreted bundle. See <a href="#appb">Appendix B</a> for examples.</p>
+
+    <h2 id="s8">8. Upgrading</h2>
+    <p>An upgrade replaces <code>contents/</code> and <code>app.toml</code> and MUST NOT modify <code>data/</code>, <code>cache/</code>, or <code>run/</code>.</p>
+
+    <h3 id="s8.1">8.1 Procedure</h3>
+    <ol>
+      <li>Verify the new archive conforms (<a class="xref" href="#s7">§7</a>).</li>
+      <li>Extract to <code>&lt;app-root&gt;/.staging-&lt;id&gt;/</code> — same filesystem as the root, so each swap is atomic.</li>
+      <li>Swap the tree:
+        <ul>
+          <li><code>rename(&lt;app-root&gt;/contents, &lt;app-root&gt;/.old-contents)</code></li>
+          <li><code>rename(&lt;app-root&gt;/.staging-&lt;id&gt;/contents, &lt;app-root&gt;/contents)</code></li>
+        </ul>
+        Where available, <code>renameat2(RENAME_EXCHANGE)</code> performs this in one step and is preferred.
+      </li>
+      <li>Replace the manifest atomically: write the new <code>app.toml</code> to a temporary file in the app root, then <code>rename()</code> it over the old one.</li>
+      <li>Delete <code>.old-contents</code> on success. If the second tree rename fails, restore <code>.old-contents</code> → <code>contents/</code>.</li>
+      <li>Update the exposure symlink or wrapper if the entry name changed.</li>
+    </ol>
+    <p>A partially-extracted tree MUST never be visible as <code>contents/</code>.</p>
+
+    <h3 id="s8.2">8.2 Rules</h3>
+    <ul>
+      <li>The installer MUST refuse to upgrade across a scope change (user ↔ system) without an explicit flag.</li>
+      <li>The installer MUST refuse to upgrade when the new manifest's <code>id</code> differs from the directory name.</li>
+      <li>The installer MUST refuse to upgrade when the archive's signature is present and invalid. When the archive is unsigned, it SHOULD warn.</li>
+      <li>The installer MUST NOT touch <code>data/</code>, <code>cache/</code>, <code>run/</code>, or any path in <code>writes_outside</code>. Data migration is the app's responsibility. An upgrade MAY change <code>writes_outside</code>: the new list replaces the old one and is what uninstall acts on. A location dropped from the list is left in place, and the installer SHOULD warn that it is no longer managed.</li>
+      <li>The installer MUST NOT restart daemons. Daemons pick up the new tree when supervision restarts them.</li>
+    </ul>
+
+    <h3 id="s8.3">8.3 Data migration</h3>
+    <p>Apps that persist structured data MUST maintain a migration path, and SHOULD record a schema version marker in <code>data/</code> (conventionally <code>data/version</code>).</p>
+    <ul>
+      <li>On startup, the app compares the marker against the version its code expects and migrates forward if needed.</li>
+      <li>Downgrade safety is the app's responsibility: it detects too-new data via the marker and either migrates backward or refuses to start with a clear message.</li>
+      <li>The installer never interprets <code>data/</code>.</li>
+    </ul>
+
+    <h3 id="s8.4">8.4 Running processes</h3>
+    <ul>
+      <li><strong>Native executables.</strong> On Linux, <code>rename()</code> over a running executable's path is safe: the running process keeps the old inode until it exits. New launches get the new tree, and <code>.old-contents</code> can be removed immediately.</li>
+      <li><strong>Interpreted apps.</strong> The old-inode guarantee does not apply. A running interpreter reads <code>contents/</code> lazily, so an upgrade during execution can mix old in-memory code with new files on disk. Upgrading a running interpreted app is unsafe. Interactive apps SHOULD detect that their tree changed (for example, by comparing a build identifier recorded at startup) and refuse to continue or offer to restart. Apps that cannot do this MUST be upgraded only while not running.</li>
+      <li><strong>Daemons.</strong> The installer leaves the new tree in place and lets supervision restart the service on its own schedule. Restarts remain under the administrator's control.</li>
+    </ul>
+
+    <h3 id="s8.5">8.5 Rollback</h3>
+    <ul>
+      <li>Automatic rollback on swap failure: <code>.old-contents</code> is restored to <code>contents/</code>.</li>
+      <li>Manual rollback: <code>--keep N</code> retains up to N previous trees as <code>.old-contents-N</code>. Off by default.</li>
+      <li>Data rollback is the app's problem, signalled by the schema marker (<a class="xref" href="#s8.3">§8.3</a>).</li>
+    </ul>
+
+    <h2 id="s9">9. Daemons</h2>
+    <p>A daemon is an app whose <code>entry</code> runs as a long-lived foreground process. It uses the same layout as any other app.</p>
+    <ul>
+      <li>A <strong>system-scope daemon</strong> lives at <code>/opt/apps/&lt;id&gt;/</code>, owned by <code>root</code> or a dedicated service user. Its <code>data/</code>, <code>cache/</code>, and <code>run/</code> are inside that root, owned accordingly. It MUST NOT write into any user's <code>~/.apps/</code>.</li>
+      <li>A <strong>per-user daemon</strong> lives at <code>~/.apps/&lt;id&gt;/</code>, owned by the user, with its mutable directories inside. It MUST NOT write into <code>/opt/apps/</code>.</li>
+      <li>Supervision (systemd, launchd, a process manager, or a user running it in a terminal) is out of scope. The spec guarantees only that <code>entry</code> is a foreground process rooted at the app root.</li>
+      <li>Socket and lock paths are <code>&lt;app-root&gt;/run/</code>. Clients find them by the same resolution rules (<a class="xref" href="#s3">§3</a>).</li>
+      <li><strong>A daemon MUST unlink a stale socket before binding.</strong> <code>run/</code> may be cleared on startup, but an app that cannot rely on that MUST check for an existing socket path and remove it after verifying no process is listening. <code>run/</code> being emptied by the supervisor is an optimization, not the correctness mechanism.</li>
+      <li>A daemon MUST NOT assume <code>run/</code> survives a restart. Its durable configuration belongs in <code>data/</code>.</li>
+    </ul>
+
+    <h2 id="s10">10. Relationship to other formats</h2>
+    <ul>
+      <li><strong>macOS <code>.app</code>.</strong> The closest structural analogue, and the source of the name: <code>Contents/</code> plays the role of <code>contents/</code>, <code>Info.plist</code> that of <code>app.toml</code>, and <code>CFBundleIdentifier</code> that of <code>id</code>. macOS keeps mutable data <em>outside</em> the bundle (<code>~/Library/Application Support/&lt;id&gt;/</code>, <code>~/Library/Caches/&lt;id&gt;/</code>) because the bundle is code-signed and the seal covers <code>Contents/</code>. This format internalizes mutable data because the root, not the bundle, is the unit: the point is that deleting the root is a complete uninstall. macOS's externalization is why uninstalling a Mac app leaves a dozen directories behind.</li>
+      <li><strong>FHS / Debian / RPM.</strong> These install a diff against <code>/</code> and bake absolute paths at build time, scattering an app across <code>/usr</code>, <code>/etc</code>, <code>/var/lib</code>, <code>/run</code>. This format gives each app a single root with the same internal shape at every scope. A system package MAY wrap a conforming app by extracting it intact to <code>/opt/apps/&lt;id&gt;/</code>; it MUST NOT split the tree across FHS directories. Where a supervisor mandates FHS placement for mutable data, <a class="xref" href="#s3.4">§3.4</a>'s per-directory overrides express it.</li>
+      <li><strong>systemd's <code>StateDirectory=</code>, <code>CacheDirectory=</code>, <code>RuntimeDirectory=</code>.</strong> The same three roles, externally managed. A generated unit file can express this layout in four lines, and under <code>ProtectSystem=strict</code> those directives are also the write whitelist. This is the strongest external argument for the taxonomy. Note that <code>RuntimeDirectory=</code> is removed on stop, which is stronger than "cleared on startup."</li>
+      <li><strong>Homebrew.</strong> A keg is the closest structural match to <code>contents/</code>, but keg state lives in a shared prefix <code>var/</code>, which is why uninstall leaves data behind and needs per-formula cleanup stanzas. Homebrew also patches absolute paths at install time; this format requires no patching because resolution is runtime-relative.</li>
+      <li><strong>Nix.</strong> A store path is the purest immutable-tree model, and generation symlinks are a cleaner atomic-swap mechanism than the two-<code>rename()</code> procedure here. Nix bakes absolute store paths into binaries, which is what makes trees non-relocatable; this format goes the other way and forbids baked prefixes.</li>
+      <li><strong>Containers and sandbox packages.</strong> macOS/iOS app containers, Android's per-package <code>/data/data/&lt;pkg&gt;/</code>, and Windows MSIX package containers all internalize mutable data and enforce the root as a unit. They enforce it with the kernel; this format enforces it with convention (<a class="xref" href="#s12.2">§12.2</a>).</li>
+      <li><strong>Flatpak / Snap / AppImage.</strong> Runtimes with sandboxing and their own integration conventions. This format is layout only.</li>
+    </ul>
+
+    <h2 id="s11">11. What this specification does not define</h2>
+    <ul>
+      <li><strong>The interior of <code>contents/</code>, <code>data/</code>, and any declared write location.</strong> All are opaque to everything but the app. Tools MUST NOT depend on internal structure. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is a recommendation.</li>
+      <li><strong>Domain.</strong> This format targets apps that are more than a single static binary: apps with resources too large to embed, apps that ship a language runtime or interpreter, apps with several files, and daemons. A self-contained single-file tool needs none of this and is out of scope.</li>
+      <li><strong>The language runtime.</strong> Either bundled under <code>contents/</code> or assumed present on <code>PATH</code>. The spec does not prescribe which; it requires only that the bundle resolve and run without absolute install prefixes.</li>
+      <li><strong>Runtime version constraints.</strong> The launcher checks and fails with a clear message. Not a manifest field.</li>
+      <li><strong>Multi-command tools.</strong> A bundle exposes one <code>entry</code>. Tools with subcommands ship their commands under <code>contents/bin/</code> and dispatch from the entry, or expose the primary command. A first-class <code>commands</code> table is not defined here.</li>
+      <li><strong>Library-only packages.</strong> Not apps; out of scope.</li>
+      <li><strong>Migration from conventional layouts</strong> (<code>~/.&lt;name&gt;</code>, XDG directories). Out of scope for this specification. A conforming installer MAY offer an adoption command; if it does, it MUST NOT leave the old location as a live fallback in steady state.</li>
+      <li>Menu entries, icon themes, MIME registration, sandboxing, supervision, autostart, or updates beyond <a class="xref" href="#s8">§8</a>.</li>
+      <li>Daemon lifecycle beyond "entry is a foreground process."</li>
+      <li>Signing, dependency resolution, or repositories.</li>
+      <li>Source tree layout.</li>
+    </ul>
+
+    <h2 id="s12">12. Conformance</h2>
+
+    <h3 id="s12.1">12.1 An app</h3>
+    <p>An app conforms if:</p>
+    <ol>
+      <li>Its root matches <a class="xref" href="#s1.1">§1.1</a> and contains <code>app.toml</code> and <code>contents/</code> per <a class="xref" href="#s1.2">§1.2</a>.</li>
+      <li>Its <code>app.toml</code> contains the required fields of <a class="xref" href="#s2">§2</a> with valid values, and <code>id</code> satisfies <a class="xref" href="#s2.3">§2.3</a>.</li>
+      <li>Its <code>entry</code> resolves to an executable file inside <code>contents/</code>.</li>
+      <li>It resolves paths per <a class="xref" href="#s3">§3</a> and uses storage per <a class="xref" href="#s4">§4</a>.</li>
+      <li>Its <code>entry</code> runs in the foreground and does not self-daemonize.</li>
+      <li>It writes on its own initiative only inside its mutable directories, plus any path it declares in <code>writes_outside</code> (<a class="xref" href="#s1.4">§1.4</a>).</li>
+    </ol>
+
+    <h3 id="s12.2">12.2 The confinement test</h3>
+    <p>Run the app with <code>APP_ROOT</code> set to a fresh empty directory and <code>HOME</code> set to a second fresh empty directory, and give it no outside path to write to. After a normal run, compare <code>$HOME</code> against the app's write discipline (<a class="xref" href="#s1.4">§1.4</a>):</p>
+    <ul>
+      <li><strong>Confined:</strong> <code>$HOME</code> MUST still be empty.</li>
+      <li><strong>Declared:</strong> <code>$HOME</code> MUST contain nothing outside the paths listed in <code>writes_outside</code>.</li>
+    </ul>
+    <p>This is the mechanical statement of the write discipline, and the test that catches the <code>~/.&lt;name&gt;</code> habit. Because it measures what the app does on its own, a run in which an outside path is named proves nothing and does not belong here.</p>
+
+    <h3 id="s12.3">12.3 Other conformance</h3>
+    <p>An installer conforms if it satisfies <a class="xref" href="#s7">§7</a> and <a class="xref" href="#s8">§8</a>. A packaging command conforms if its output satisfies <a class="xref" href="#s6">§6</a>.</p>
+
+
+
+    <h2 id="appa">Appendix A — Reference path modules</h2>
+    <p>These are examples, not normative. They implement <a class="xref" href="#s3">§3</a> and <a class="xref" href="#s4">§4</a>.</p>
+
+    <h3>Python</h3>
+  <figure class="code" data-lang="python"><pre><code>import os
+import pathlib
+
+ID = "org.example.notepad"          # single source of truth
+
+
+def app_root() -&gt; pathlib.Path:
+    if r := os.environ.get("APP_ROOT"):
+        return pathlib.Path(r).resolve()
+    if os.environ.get("APP_SCOPE") == "system":
+        base = os.environ.get("APP_SYSTEM_HOME") or "/opt/apps"
+    else:
+        base = os.environ.get("APP_HOME") or str(pathlib.Path.home() / ".apps")
+    return (pathlib.Path(base) / ID).resolve()
+
+
+def tree_root() -&gt; pathlib.Path:
+    return app_root() / "contents"
+
+
+def resource(*p: str) -&gt; pathlib.Path:
+    return tree_root() / "resources" / pathlib.Path(*p)
+
+
+def _dir(env: str, default: str) -&gt; pathlib.Path:
+    d = pathlib.Path(os.environ.get(env) or (app_root() / default))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def run_dir()   -&gt; pathlib.Path: return _dir("APP_RUN_DIR", "run")
+def data_dir()  -&gt; pathlib.Path: return _dir("APP_DATA_DIR", "data")
+def cache_dir() -&gt; pathlib.Path: return _dir("APP_CACHE_DIR", "cache")</code></pre></figure>
+
+    <h3>Rust</h3>
+  <figure class="code" data-lang="rust"><pre><code>use std::path::PathBuf;
+
+const ID: &amp;str = "org.example.notepad";
+
+pub fn app_root() -&gt; PathBuf {
+    if let Some(r) = std::env::var_os("APP_ROOT") {
+        return PathBuf::from(r);
+    }
+    let base = if std::env::var("APP_SCOPE").as_deref() == Ok("system") {
+        std::env::var_os("APP_SYSTEM_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/opt/apps"))
+    } else {
+        std::env::var_os("APP_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").unwrap()).join(".apps")
+            })
+    };
+    base.join(ID)
+}
+
+pub fn tree_root() -&gt; PathBuf { app_root().join("contents") }
+pub fn resource(p: &amp;str) -&gt; PathBuf { tree_root().join("resources").join(p) }
+
+fn dir(env: &amp;str, default: &amp;str) -&gt; PathBuf {
+    let d = std::env::var_os(env)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| app_root().join(default));
+    let _ = std::fs::create_dir_all(&amp;d);
+    d
+}
+
+pub fn run_dir()   -&gt; PathBuf { dir("APP_RUN_DIR", "run") }
+pub fn data_dir()  -&gt; PathBuf { dir("APP_DATA_DIR", "data") }
+pub fn cache_dir() -&gt; PathBuf { dir("APP_CACHE_DIR", "cache") }</code></pre></figure>
+
+    <h3>Go</h3>
+  <figure class="code" data-lang="go"><pre><code>package paths
+
+import (
+	"os"
+	"path/filepath"
+)
+
+const ID = "org.example.notepad"
+
+func appRoot() string {
+	if r := os.Getenv("APP_ROOT"); r != "" {
+		abs, _ := filepath.Abs(r)
+		return abs
+	}
+	var base string
+	if os.Getenv("APP_SCOPE") == "system" {
+		base = os.Getenv("APP_SYSTEM_HOME")
+		if base == "" {
+			base = "/opt/apps"
+		}
+	} else {
+		base = os.Getenv("APP_HOME")
+		if base == "" {
+			home, _ := os.UserHomeDir()
+			base = filepath.Join(home, ".apps")
+		}
+	}
+	return filepath.Join(base, ID)
+}
+
+func treeRoot() string         { return filepath.Join(appRoot(), "contents") }
+func resource(p string) string { return filepath.Join(treeRoot(), "resources", p) }
+
+func dir(env, def string) string {
+	d := os.Getenv(env)
+	if d == "" {
+		d = filepath.Join(appRoot(), def)
+	}
+	os.MkdirAll(d, 0o700)
+	return d
+}
+
+func runDir() string   { return dir("APP_RUN_DIR", "run") }
+func dataDir() string  { return dir("APP_DATA_DIR", "data") }
+func cacheDir() string { return dir("APP_CACHE_DIR", "cache") }</code></pre></figure>
+
+    <h2 id="appb">Appendix B — Bundle templates</h2>
+
+    <h3>Python</h3>
+    <p>Launcher at <code>contents/bin/notepad</code> (shipped as <code>scripts/launcher.sh</code>):</p>
+  <figure class="code" data-lang="sh"><pre><code>#!/bin/sh
+set -eu
+
+# Resolve through symlinks to the real tree, then up to the app root.
+self=$(readlink -f "$0")
+tree=$(dirname "$(dirname "$self")")   # &lt;root&gt;/contents
+root=$(dirname "$tree")                # &lt;root&gt;
+
+export APP_ROOT="${APP_ROOT:-$root}"
+export PYTHONPATH="$tree/lib${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPYCACHEPREFIX="$root/cache/pyc"
+mkdir -p "$root/cache"
+
+exec python3 -m notepad "$@"</code></pre></figure>
+    <p>Makefile:</p>
+  <figure class="code" data-lang="make"><pre><code>ID := org.example.notepad
+
+bundle:
+	rm -rf build/$(ID)
+	mkdir -p build/$(ID)/contents/bin build/$(ID)/contents/lib build/$(ID)/contents/resources
+	cp -r src/notepad build/$(ID)/contents/lib/
+	cp -r assets/. build/$(ID)/contents/resources/
+	install -m 0755 scripts/launcher.sh build/$(ID)/contents/bin/notepad
+	cp app.toml build/$(ID)/app.toml
+	find build/$(ID)/contents -name __pycache__ -prune -exec rm -rf {} +
+
+dev: bundle
+	./scripts/run-dev.sh build/$(ID)</code></pre></figure>
+    <p><code>run-dev.sh</code> creates a temporary root with <code>contents/</code> symlinked to the build tree and fresh mutable directories, then runs:</p>
+  <figure class="code" data-lang="sh"><pre><code>#!/bin/sh
+set -eu
+build=$(readlink -f "$1")
+tmp=$(mktemp -d)
+ln -s "$build/contents" "$tmp/contents"
+mkdir -p "$tmp/data" "$tmp/cache" "$tmp/run"
+trap 'rm -rf "$tmp"' EXIT INT TERM
+APP_ROOT="$tmp" exec "$build/contents/bin/notepad" "$@"</code></pre></figure>
+
+    <h3>Cargo (Makefile)</h3>
+  <figure class="code" data-lang="make"><pre><code>ID := org.example.notepad
+
+bundle:
+	rm -rf build/$(ID)
+	mkdir -p build/$(ID)/contents/bin build/$(ID)/contents/resources
+	cp target/release/notepad build/$(ID)/contents/bin/
+	cp -r assets/. build/$(ID)/contents/resources/
+	cp app.toml build/$(ID)/app.toml
+
+dev: bundle
+	./scripts/run-dev.sh build/$(ID)</code></pre></figure>
+
+    <h3>npm (package.json)</h3>
+  <figure class="code" data-lang="json"><pre><code>{
+  "scripts": {
+    "bundle": "ID=org.example.notepad; rm -rf build/$ID; mkdir -p build/$ID/contents/bin build/$ID/contents/resources &amp;&amp; cp -r dist/* build/$ID/contents/bin/ &amp;&amp; cp -r assets/* build/$ID/contents/resources/ &amp;&amp; cp app.toml build/$ID/app.toml",
+    "dev": "npm run bundle &amp;&amp; ./scripts/run-dev.sh build/org.example.notepad"
+  }
+}</code></pre></figure>
+
+    <h2 id="appc">Appendix C — Reference installer</h2>
+  <figure class="code" data-lang="sh"><pre><code>#!/bin/sh
+# appctl install|upgrade|remove|list|run
+#        [--user|--system] [--force] [--purge] &lt;arg&gt;
+set -eu
+
+scope_root() {
+  case "$1" in
+    --system) echo "${APP_SYSTEM_HOME:-/opt/apps}" ;;
+    *)        echo "${APP_HOME:-$HOME/.apps}" ;;
+  esac
+}
+
+bindir_for() {
+  case "$1" in
+    --system) echo "/usr/local/bin" ;;
+    *)        echo "$HOME/.local/bin" ;;
+  esac
+}
+
+# Minimal TOML reader: finds `key = "value"` or `key = 'value'`.
+field() {
+  key="$2"; file="$1"
+  sed -n "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p;
+          s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" \
+    "$file" | head -n1
+}
+
+# Minimal reader for a single-line TOML array: key = ["a", "b"].
+list() {
+  key="$2"; file="$1"
+  sed -n "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\[\(.*\)\].*/\1/p" "$file" |
+    tr ',' '\n' |
+    sed -n "s/^[[:space:]]*[\"']\([^\"']*\)[\"'][[:space:]]*$/\1/p"
+}
+
+# Expands a leading ~/ and rejects anything that is not absolute.
+expand_path() {
+  case "$1" in
+    "~/"*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;;
+    /*)     printf '%s\n' "$1" ;;
+    *)      return 1 ;;
+  esac
+}
+
+cmd="$1"; shift
+
+case "$cmd" in
+
+install|upgrade)
+  scope="--user"; force=0
+  while [ $# -gt 0 ]; do case "$1" in
+    --user|--system) scope="$1" ;;
+    --force) force=1 ;;
+    *) break ;;
+  esac; shift; done
+  archive="$1"
+
+  root="$(scope_root "$scope")"
+  bindir="$(bindir_for "$scope")"
+  staging="$root/.staging-$$"
+  trap 'rm -rf "$staging"' EXIT INT TERM
+
+  mkdir -p "$staging" "$bindir"
+  tar -xzf "$archive" -C "$staging" --strip-components=1
+
+  id="$(field "$staging/app.toml" id)"
+  entry="$(field "$staging/app.toml" entry)"
+  [ -n "$id" ] || { echo "not conforming: missing id" &gt;&amp;2; exit 1; }
+  [ -n "$entry" ] || { echo "not conforming: missing entry" &gt;&amp;2; exit 1; }
+  [ -x "$staging/contents/$entry" ] || {
+    echo "not conforming: contents/$entry is not executable" &gt;&amp;2; exit 1; }
+
+  list "$staging/app.toml" writes_outside | while read -r p; do
+    echo "writes outside the app root: $p" &gt;&amp;2
+  done
+
+  dest="$root/$id"
+  if [ -e "$dest" ] &amp;&amp; [ "$cmd" = "install" ] &amp;&amp; [ "$force" -eq 0 ]; then
+    echo "exists: $id (use --force or upgrade)" &gt;&amp;2; exit 1
+  fi
+
+  mkdir -p "$dest"
+  [ -e "$dest/contents" ] &amp;&amp; mv "$dest/contents" "$dest/.old-contents"
+
+  mv "$staging/contents" "$dest/contents"
+  tmp="$dest/.app.toml.$$"
+  cp "$staging/app.toml" "$tmp"
+  mv "$tmp" "$dest/app.toml"
+
+  [ -e "$dest/.old-contents" ] &amp;&amp; rm -rf "$dest/.old-contents"
+
+  ln -sfn "$dest/contents/$entry" "$bindir/$(basename "$entry")"
+  echo "installed: $id -&gt; $dest"
+  ;;
+
+remove)
+  scope="--user"; purge=0
+  while [ $# -gt 0 ]; do case "$1" in
+    --user|--system) scope="$1" ;;
+    --purge) purge=1 ;;
+    *) break ;;
+  esac; shift; done
+  id="$1"
+  root="$(scope_root "$scope")"
+  bindir="$(bindir_for "$scope")"
+  dest="$root/$id"
+  [ -f "$dest/app.toml" ] || { echo "not installed: $id" &gt;&amp;2; exit 1; }
+
+  entry="$(field "$dest/app.toml" entry)"
+  [ -n "$entry" ] &amp;&amp; rm -f "$bindir/$(basename "$entry")"
+
+  if [ "$purge" -eq 1 ]; then
+    list "$dest/app.toml" writes_outside | while read -r p; do
+      q="$(expand_path "$p")" || { echo "cannot purge: $p" &gt;&amp;2; continue; }
+      case "$q" in
+        "/"|"$HOME") echo "refusing to purge: $p" &gt;&amp;2; continue ;;
+      esac
+      rm -rf "$q"
+    done
+    rm -rf "$dest"
+  else
+    rm -rf "$dest/contents" "$dest/cache" "$dest/run"
+  fi
+  echo "removed: $id"
+  ;;
+
+list)
+  scope="--user"; [ "${1:-}" = "--system" ] &amp;&amp; scope="--system"
+  root="$(scope_root "$scope")"
+  for d in "$root"/*/; do
+    [ -f "$d/app.toml" ] &amp;&amp; field "$d/app.toml" id
+  done
+  ;;
+
+run)
+  scope="--user"
+  [ "${1:-}" = "--system" ] &amp;&amp; { scope="--system"; shift; }
+  id="$1"; shift
+  root="$(scope_root "$scope")"
+  dest="$root/$id"
+  entry="$(field "$dest/app.toml" entry)"
+  APP_ROOT="$dest" exec "$dest/contents/$entry" "$@"
+  ;;
+
+*)
+  echo "usage: appctl install|upgrade|remove|list|run" &gt;&amp;2
+  exit 2
+  ;;
+esac</code></pre></figure>
+    <p>The <code>field()</code> and <code>list()</code> readers are minimal on purpose: they handle quoted scalars and a single-line string array, and nothing else. A conforming installer may use a real TOML parser, add zip support, warn on manifest mismatches, verify signatures, and preserve symlinks. The shape does not change: verify, extract, swap, link.</p>
+    <p>The guard against purging <code>/</code> or <code>$HOME</code> is worth keeping in any installer. A declared path is a directory handed to <code>rm -rf</code> on the word of a manifest that is self-asserted (<a class="xref" href="#s2.3">§2.3</a>), so the installer refuses the two values that would make a mistake unrecoverable.</p>
+
+
+    <footer class="footer">
+      <p>App Bundle Layout Specification — Version 1.0. Self-contained HTML; no external assets. Save this page and open it offline.</p>
+      <p><a href="#top">Back to top &uarr;</a></p>
+    </footer>
+
+    </article>
+  </div>
+</div>
+
+<script>
+  // Marks the section currently at the top of the viewport in the table of contents.
+  (function () {
+    var links = document.querySelectorAll('nav.toc a[href^="#"]');
+    var sections = [];
+
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      var section = document.getElementById(link.getAttribute('href').slice(1));
+      if (section) sections.push({ link: link, section: section });
+    }
+    if (!sections.length) return;
+
+    var current = null;
+    var queued = false;
+
+    function mark() {
+      // The reading line sits a little below the top edge of the viewport.
+      var line = 120;
+      var active = sections[0];
+
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].section.getBoundingClientRect().top <= line) {
+          active = sections[i];
+        }
+      }
+
+      // At the very bottom, the last section is what the reader is looking at.
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        active = sections[sections.length - 1];
+      }
+
+      if (active === current) return;
+      if (current) {
+        current.link.classList.remove('active');
+        current.link.removeAttribute('aria-current');
+      }
+      active.link.classList.add('active');
+      active.link.setAttribute('aria-current', 'true');
+      current = active;
+    }
+
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      window.requestAnimationFrame(function () {
+        mark();
+        queued = false;
+      });
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    mark();
+  })();
+</script>
+
+</body>
+</html>
