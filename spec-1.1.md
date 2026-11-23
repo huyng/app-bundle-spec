@@ -5,9 +5,7 @@ eyebrow: Filesystem convention
 version: 1.0
 description: "A filesystem convention for self-contained applications: one directory per app, copy to install, delete to uninstall."
 lede: >
-  A filesystem convention for self-contained applications. An app is one directory.
-  Copying it is installation; deleting it is uninstallation. The same layout applies
-  to desktop apps, command-line tools, and daemons, at user or system scope.
+  A filesystem convention for self-contained applications. An app is one directory. Copying it is installation; deleting it is uninstallation. The same layout applies to desktop apps, command-line tools, and daemons, at user or system scope.
 ---
 
 ## 1. App root

@@ -7,7 +7,12 @@ Markdown, fills in the template, and writes the finished page.
 
 Run it with:
 
-    python3 build_spec.py
+    python3 build.py
+
+Add ``--preview`` to serve the page at http://127.0.0.1:8000/ as well. The
+server rebuilds whenever the Markdown or the template changes, rewrites the
+output file, and the open page reloads itself. A broken edit shows the error in
+the browser instead of a blank page.
 
 The default input, template, and output paths sit next to this script.
 """
@@ -18,6 +23,7 @@ import argparse
 import html
 import re
 import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
@@ -534,6 +540,198 @@ def build_html(markdown_text, template_text):
     return PLACEHOLDER_RE.sub(replace, template_text)
 
 
+def source_stamp(paths):
+    """Return a token that changes whenever one of the files changes.
+
+    Args:
+        paths: Files to watch, usually the Markdown source and the template.
+
+    Returns:
+        A short string built from each file's size and modification time. A
+        missing file yields a token that differs from every readable state, so
+        a file that appears or disappears also counts as a change.
+    """
+    parts = []
+    for path in paths:
+        try:
+            info = path.stat()
+        except OSError:
+            parts.append("missing")
+            continue
+        parts.append(f"{info.st_size}:{info.st_mtime_ns}")
+    return "|".join(parts)
+
+
+def with_reload_script(page, version):
+    """Add the script that reloads the page when the sources change.
+
+    Args:
+        page: A complete HTML document.
+        version: Stamp to compare the server's current stamp against.
+
+    Returns:
+        The page with a small polling script before ``</body>``. Polling is used
+        rather than a socket because it survives sleeps, reloads, and restarts
+        of the server without leaving the browser stuck.
+    """
+    script = (
+        "<script>\n"
+        "  // Ask the preview server whether the sources changed; reload if so.\n"
+        "  (function () {\n"
+        f'    var seen = "{version}";\n'
+        "    function check() {\n"
+        '      fetch("/__version", { cache: "no-store" })\n'
+        "        .then(function (response) { return response.text(); })\n"
+        "        .then(function (current) {\n"
+        "          if (current !== seen) window.location.reload();\n"
+        "        })\n"
+        '        .catch(function () { /* server restarting; try again next tick */ });\n'
+        "    }\n"
+        "    window.setInterval(check, 400);\n"
+        "  })();\n"
+        "</script>\n"
+    )
+    if "</body>" in page:
+        return page.replace("</body>", script + "</body>", 1)
+    return page + script
+
+
+def error_page(message, version):
+    """Render a plain page that shows a failed build.
+
+    Args:
+        message: The error text to display.
+        version: Stamp of the sources this failure came from.
+
+    Returns:
+        A small, self-contained HTML document. It keeps auto-reload, so fixing
+        the source replaces the error with a fresh build.
+    """
+    page = (
+        "<!doctype html>\n"
+        '<meta charset="utf-8">\n'
+        "<title>Build failed</title>\n"
+        '<body style="font: 1rem/1.6 system-ui; padding: 2rem">'
+        "<h1>Build failed</h1>"
+        f"<pre>{html.escape(message)}</pre>"
+        "<p>Fix the source and the page reloads itself. "
+        "The last good build is still on disk.</p>"
+        "</body>\n"
+    )
+    return with_reload_script(page, version)
+
+
+class Preview:
+    """Rebuild the page when its sources change, and remember the last result.
+
+    The build is keyed on a stamp of the source files, so repeated requests for
+    an unchanged document reuse the previous render instead of rebuilding it.
+    """
+
+    def __init__(self, input_path, template_path, output_path):
+        self.input_path = input_path
+        self.template_path = template_path
+        self.output_path = output_path
+        self.stamp = None
+        self.status = 200
+        self.page = ""
+
+    def refresh(self):
+        """Rebuild if a source file changed, writing the output on success.
+
+        Returns:
+            A pair ``(status, page)`` where status is 200 for a good build and
+            500 for a failed one.
+        """
+        current = source_stamp((self.input_path, self.template_path))
+        if current == self.stamp:
+            return self.status, self.page
+
+        self.stamp = current
+        try:
+            markdown_text = self.input_path.read_text(encoding="utf-8")
+            template_text = self.template_path.read_text(encoding="utf-8")
+            page = build_html(markdown_text, template_text)
+        except (OSError, SpecError) as exc:
+            self.status = 500
+            self.page = error_page(str(exc), current)
+            return self.status, self.page
+
+        self.output_path.write_text(page, encoding="utf-8")
+        print(f"rebuilt {self.output_path}", flush=True)
+        self.status = 200
+        self.page = with_reload_script(page, current)
+        return self.status, self.page
+
+
+def make_handler(state):
+    """Build a request handler that serves the previewed page.
+
+    Args:
+        state: The :class:`Preview` that owns the build.
+
+    Returns:
+        A handler class for ``HTTPServer``. ``/`` serves the page and
+        ``/__version`` serves the current source stamp. Nothing else is
+        reachable, so the rest of the repository stays private.
+    """
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            route = self.path.split("?", 1)[0]
+            if route == "/__version":
+                state.refresh()
+                self.send_body(200, "text/plain; charset=utf-8", state.stamp)
+            elif route in ("/", "/index.html"):
+                status, page = state.refresh()
+                self.send_body(status, "text/html; charset=utf-8", page)
+            else:
+                self.send_error(404)
+
+        def send_body(self, status, content_type, text):
+            """Write one response with no caching."""
+            body = text.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            # Never cache, so a reload always shows the current source.
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            """Hide the per-request log line; the rebuild message is enough."""
+
+    return Handler
+
+
+def serve(state, port):
+    """Serve the specification on the local machine until interrupted.
+
+    Args:
+        state: The :class:`Preview` that owns the build.
+        port: Port on the loopback interface.
+
+    Raises:
+        SpecError: If the port cannot be opened.
+    """
+    try:
+        server = HTTPServer(("127.0.0.1", port), make_handler(state))
+    except OSError as exc:
+        raise SpecError(f"cannot listen on 127.0.0.1:{port}: {exc.strerror}") from exc
+
+    print(
+        f"preview at http://127.0.0.1:{server.server_port}/ (ctrl-c to stop)",
+        flush=True,
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print()
+    finally:
+        server.server_close()
+
+
 def main(argv=None):
     """Read the source files, write the HTML page, and report the result."""
     here = Path(__file__).resolve().parent
@@ -551,7 +749,25 @@ def main(argv=None):
     parser.add_argument(
         "-o", "--output", type=Path, default=here / "spec-1.1.html", help="HTML output"
     )
+    parser.add_argument(
+        "--preview", action="store_true", help="serve the page after writing it, until ctrl-c"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="port for --preview (default: 8000)"
+    )
     args = parser.parse_args(argv)
+
+    if args.preview:
+        build_state = Preview(args.input, args.template, args.output)
+        status, _ = build_state.refresh()
+        if status != 200:
+            print("fix the source, then reload the page to try again", file=sys.stderr)
+        try:
+            serve(build_state, args.port)
+        except SpecError as exc:
+            print(f"build: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
     try:
         markdown_text = args.input.read_text(encoding="utf-8")
@@ -559,7 +775,7 @@ def main(argv=None):
         page = build_html(markdown_text, template_text)
         args.output.write_text(page, encoding="utf-8")
     except (OSError, SpecError) as exc:
-        print(f"build_spec: {exc}", file=sys.stderr)
+        print(f"build: {exc}", file=sys.stderr)
         return 1
 
     print(f"wrote {args.output}")
