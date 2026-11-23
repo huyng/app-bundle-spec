@@ -10,7 +10,7 @@ lede: >
 
 ## 1. App root
 
-Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory ([§3.4](#s3.4)) or the app declares a write location outside the root ([§1.4](#s1.4)).
+Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory ([§3.4](#s3.4)). Writes the user asks for, to paths the user names, are the user's writes and live wherever the user says ([§1.4](#s1.4)).
 
 ### 1.1 Scope
 
@@ -46,10 +46,10 @@ Every app has exactly one root directory. Everything the app writes on its own i
 :::
 
 - `app.toml` is at the root because it describes the root. It is replaced on upgrade ([§7](#s7)) and is never written at runtime.
-- `contents/` is the tree that ships. It is never modified at runtime.
+- `contents/` is the tree that ships. It is never modified at runtime, and it is self-contained: dependencies are resolved when the tree is built and shipped inside it, and nothing is fetched when the app starts. A tree that bakes an absolute install prefix into its files is non-conforming. A launcher may compute absolute paths at runtime ([§5.1](#s5.1)); a build may not write them in.
 - `data/`, `cache/`, and `run/` are created by the app on first use.
 - The names under `data/` are examples, not a layout. An app that keeps one SQLite file, a directory per document, or nothing at all conforms equally; only the directory itself and who may write to it are normative.
-- The app MUST NOT write outside its app root on its own initiative, except to a write location it declares in `app.toml` ([§1.4](#s1.4)). `contents/` is never written at all.
+- The app MUST NOT write outside its app root on its own initiative ([§1.4](#s1.4)). `contents/` is never written at all, by anyone, at runtime.
 
 ### 1.3 Modes
 
@@ -92,6 +92,8 @@ An app writes to two kinds of places: its own, whose location the layout fixes, 
 
 TOML, at the app root. Unknown keys are ignored. All paths in the manifest are relative to the contents directory (`contents/`), regardless of the manifest's own location. Absolute paths are invalid.
 
+The manifest describes the root, so the copy that ships is not always the copy that is authored. A manifest in a source tree MAY be incomplete, and an installer MAY generate the fields the source could not know ([§6](#s6)).
+
 ### 2.1 Required fields
 
 ::: table
@@ -99,7 +101,7 @@ TOML, at the app root. Unknown keys are ignored. All paths in the manifest are r
 | --- | --- | --- |
 | `id` | string | Unique identifier ([§2.3](#s2.3)). Stable across versions. Names the app root. |
 | `name` | string | Human-readable name. |
-| `version` | string | Version string. Opaque to this specification. |
+| `version` | string | Non-empty version string, opaque to this specification. MUST be present in an installed root; a source tree's manifest MAY omit it, and the installer then supplies it from the revision installed ([§6](#s6)). Display metadata only: see [§2.5](#s2.5). |
 :::
 
 ### 2.2 Optional fields
@@ -141,9 +143,17 @@ entrypoint = "bin/monitord"
 
 Both are confined.
 
+Both declare a `version` because they are installed roots. The same manifest in a source tree may leave the line out and let the installer fill it in.
+
 The format does not distinguish app types. Desktop apps, command-line tools, and daemons use the same manifest and the same layout. How `entrypoint` is run — interactively, supervised, socket-activated — is outside this specification.
 
-`entrypoint` may be a native executable, a script with an interpreter directive, or a launcher that sets up an interpreted runtime and `exec`s the interpreter. The manifest does not distinguish these; the launcher is the sanctioned mechanism ([§6.3](#s6.3)).
+`entrypoint` may be a native executable, a script with an interpreter directive, or a launcher that sets up an interpreted runtime and `exec`s the interpreter. The manifest does not distinguish these; the launcher is the sanctioned mechanism ([§5.1](#s5.1)).
+
+### 2.5 The version is not a compatibility signal
+
+`version` says which build is installed and nothing more. It is display metadata for listing installed apps, and for a human reading `app.toml`. It MUST NOT be used to decide whether an upgrade is safe, whether data can be read, or whether two bundles are compatible: ordering opaque strings is not defined here, and a commit hash has no order at all.
+
+The version that governs behaviour is the app's own, and it lives in `data/` ([§7.3](#s7.3)), not in the manifest.
 
 ## 3. Runtime path resolution
 
@@ -185,7 +195,7 @@ The fourth quadrant is empty by definition: anything that must survive a restart
 - `cache/` may be deleted at any time without loss of user data. Its internal structure is the app's own.
 
 ::: note
-**What `data/` is.** It holds everything the app persists: settings, local databases, indexes, tokens, history, and any files whose lifecycle the app owns. It is the app's durable state, and it is the reason uninstall has two modes (`remove` keeps it; `remove --purge` does not).
+**What `data/` is.** It holds everything the app persists: settings, local databases, indexes, tokens, history, and any files whose lifecycle the app owns. It is the app's durable state, and it is the reason uninstall has two modes (a plain uninstall keeps it; a purge does not).
 
 It is not a general-purpose home for user documents. An app that manages files the user considers theirs (notes, projects, photos) SHOULD store them where the user chooses, naming a path at runtime ([§1.4](#s1.4)). Files in `data/` are expected to be backed up and restored with the app root, not browsed by the user.
 :::
@@ -205,37 +215,7 @@ Rules:
 - Apps MUST NOT hardcode `~/.<name>`, `~/.<id>`, or XDG paths.
 - `entrypoint` runs in the foreground. Apps MUST NOT self-daemonize (no fork/setsid/double-fork).
 
-Reference modules per language: [Appendix A](#appa).
-
-## 6. Installation
-
-A conforming installer extracts a verified archive to the scope's app root and exposes `entrypoint`. The archive is a `.tar.gz` (`.zip` allowed) whose root holds exactly one directory named `<id>/`, containing `app.toml` and `contents/` and nothing else: no install scripts, no post-install hooks, no absolute build prefixes. Dependencies are resolved when the bundle is built and shipped flat inside `contents/`; a bundle MUST NOT ship a runtime environment that bakes in absolute paths, and MUST NOT fetch dependencies when it starts.
-
-::: table mono
-| Scope | App root | Entry exposed as |
-| --- | --- | --- |
-| Per-user | ~/.apps/\<id\>/ | ~/.local/bin/\<entrypoint-name\> symlink or wrapper |
-| System | /opt/apps/\<id\>/ | /usr/local/bin/\<entrypoint-name\> symlink or wrapper |
-:::
-
-- The installer MUST verify the archive conforms before extraction: exactly one `<id>/` at the archive root, `<id>/app.toml` present with valid required fields, and, when the manifest declares an `entrypoint`, `<id>/contents/<entrypoint>` an executable file.
-- Extraction MUST be atomic: unpack to a temp directory under the target parent, then `rename()` into place.
-- The installer MUST preserve executable bits and symlinks.
-- The installer MUST refuse to overwrite an existing `<id>` unless `--force`, and SHOULD warn when the existing manifest's `name` or `entrypoint` differs from the new one.
-- Scope is an installation decision, not a property of the bundle. The same archive installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of [§6.1](#s6.1).
-- There are **no install-time scripts**. First-run setup is the app's job.
-- Uninstall removes `contents/`, `cache/`, `run/`, and `app.toml`. `data/` is removed only with explicit purge. What a non-purge uninstall leaves is `data/` alone, which is no longer an app root: without a manifest, `list` does not see it and `install` treats the `<id>` as absent.
-- Menu entries and MIME registration are out of scope. Hosts MAY derive them from `app.toml`; nothing requires it.
-
-### 6.1 Exposure
-
-The exposed entrypoint may be a symlink to `contents/<entrypoint>` or a wrapper script that sets `APP_ROOT` and `exec`s it. For a native executable, a symlink is sufficient. For an interpreted app, a wrapper is required ([§6.3](#s6.3)). At system scope the exposed entry MUST be a wrapper that sets `$APP_ROOT` to the installed root. There is no system default base in [§3](#s3), so a symlink alone would resolve to `~/.apps/<id>` under whatever user ran it — or fail ([§3](#s3)).
-
-### 6.2 What the installer does not do
-
-It does not parse state, run app code, register services, or restart daemons. Its entire job is: verify, extract, swap, link.
-
-### 6.3 Launchers
+### 5.1 Launchers
 
 An interpreted app ships a launcher at `entrypoint`. The launcher is a script with an interpreter directive, owned by the app, and is responsible for:
 
@@ -246,27 +226,50 @@ An interpreted app ships a launcher at `entrypoint`. The launcher is a script wi
 
 The launcher is the only file that must be executable in an interpreted bundle. See [Appendix B](#appb) for examples.
 
+Reference modules per language: [Appendix A](#appa).
+
+## 6. Installation
+
+Installation produces a conforming app root ([§1](#s1)). How the installed files were obtained is outside this specification: an installer MAY accept a `.tar.gz` bundle, a plain directory, a git checkout, or any other source layout, provided what it produces is an app root.
+
+- The app's files go in `contents/`; the manifest goes at the root. Because manifest paths resolve relative to `contents/` ([§2](#s2)), a source tree whose manifest sits beside its files is installed by moving the manifest up to the root and the rest down into `contents/`. That is the only transform a minimal installer needs.
+- An installer MAY generate fields the source tree could not know. `version` is the usual case: it is normally the revision that was installed ([§2.1](#s2.1)).
+- An installer SHOULD check the result before exposing it: `app.toml` present at the root with valid required fields, and, when one is declared, an executable `entrypoint` inside `contents/`. This is the test of [§10.1](#s10.1), applied to whatever it just built.
+- In steady state the root holds `app.toml`, `contents/`, and whichever mutable directories exist. An installer MAY use temporary names in the root while swapping trees ([§7.1](#s7.1)); none may survive a completed install or upgrade.
+- An installer MUST preserve the executable bits and symlinks it finds in the tree, so that a declared `entrypoint` is an executable file inside `contents/`.
+- There are **no install-time scripts**. First-run setup is the app's job.
+- Uninstall removes `contents/`, `cache/`, `run/`, and `app.toml`. `data/` is removed only on explicit purge. What a non-purge uninstall leaves is `data/` alone, which is no longer an app root: it has no manifest, so a host that enumerates installed apps does not see it, and installing that `<id>` there again starts from nothing.
+- Menu entries and MIME registration are out of scope. Hosts MAY derive them from `app.toml`; nothing requires it.
+
+::: table mono
+| Scope | App root | Entry exposed as |
+| --- | --- | --- |
+| Per-user | ~/.apps/\<id\>/ | ~/.local/bin/\<entrypoint-name\> symlink or wrapper |
+| System | /opt/apps/\<id\>/ | /usr/local/bin/\<entrypoint-name\> symlink or wrapper |
+:::
+
+Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of [§6.1](#s6.1).
+
+### 6.1 Exposure
+
+The exposed entrypoint may be a symlink to `contents/<entrypoint>` or a wrapper script that sets `APP_ROOT` and `exec`s it. For a native executable, a symlink is sufficient. For an interpreted app, a wrapper is required ([§5.1](#s5.1)). At system scope the exposed entry MUST be a wrapper that sets `$APP_ROOT` to the installed root. There is no system default base in [§3](#s3), so a symlink alone would resolve to `~/.apps/<id>` under whatever user ran it — or fail ([§3](#s3)).
+
+### 6.2 What the installer does not do
+
+It does not parse state, run app code, register services, or restart daemons. It does not interpret `data/` ([§7.3](#s7.3)). Its entire job is to produce a conforming root and expose `entrypoint`.
+
 ## 7. Upgrading
 
 An upgrade replaces `contents/` and `app.toml` and MUST NOT modify `data/`, `cache/`, or `run/`.
 
-### 7.1 Procedure
+### 7.1 The swap
 
-1. Verify the new archive conforms ([§6](#s6)).
-2. Extract to `<app-root>/.staging-<id>/` — same filesystem as the root, so each swap is atomic.
-3. Swap the tree:
-  - `rename(<app-root>/contents, <app-root>/.old-contents)`
-  - `rename(<app-root>/.staging-<id>/contents, <app-root>/contents)`
-  Where available, `renameat2(RENAME_EXCHANGE)` performs this in one step and is preferred.
-4. Replace the manifest atomically: write the new `app.toml` to a temporary file in the app root, then `rename()` it over the old one.
-5. Delete `.old-contents` on success. If the second tree rename fails, restore `.old-contents` → `contents/`.
-6. Update the exposure symlink or wrapper if the entrypoint name changed.
+The new tree is assembled somewhere other than `contents/` and moved into place whole, on the same filesystem, so that `contents/` is always either the old tree or the new one and never a mixture. Two `rename()` calls — old tree aside, new tree in — satisfy this; where available, `renameat2(RENAME_EXCHANGE)` does it in one step. `app.toml` is replaced as a single file, never edited in place.
 
-A partially-extracted tree MUST never be visible as `contents/`.
+A swap that fails leaves the previous tree in place.
 
 ### 7.2 Rules
 
-- The installer MUST refuse to upgrade across a scope change (user ↔ system) without an explicit flag. A scope change is visible in the filesystem, not in the archive: if `<id>` is already installed at the other scope, this is one.
 - The installer MUST refuse to upgrade when the new manifest's `id` differs from the directory name.
 - The installer MUST NOT touch `data/`, `cache/`, or `run/`. Data migration is the app's responsibility.
 - The installer MUST NOT restart daemons. Daemons pick up the new tree when supervision restarts them.
@@ -277,19 +280,12 @@ Apps that persist structured data MUST maintain a migration path, and SHOULD rec
 
 - On startup, the app compares the marker against the version its code expects and migrates forward if needed.
 - Downgrade safety is the app's responsibility: it detects too-new data via the marker and either migrates backward or refuses to start with a clear message.
-- The installer never interprets `data/`.
 
 ### 7.4 Running processes
 
-- **Native executables.** On Linux, `rename()` over a running executable's path is safe: the running process keeps the old inode until it exits. New launches get the new tree, and `.old-contents` can be removed immediately.
+- **Native executables.** On Linux, `rename()` over a running executable's path is safe: the running process keeps the old inode until it exits, so new launches get the new tree while the old one drains away.
 - **Interpreted apps.** The old-inode guarantee does not apply. A running interpreter reads `contents/` lazily, so an upgrade during execution can mix old in-memory code with new files on disk. Upgrading a running interpreted app is unsafe. Interactive apps SHOULD detect that their tree changed (for example, by comparing a build identifier recorded at startup) and refuse to continue or offer to restart. Apps that cannot do this MUST document that they may only be upgraded while stopped, because an installer cannot see what is running ([§6.2](#s6.2)).
 - **Daemons.** The installer leaves the new tree in place and lets supervision restart the service on its own schedule. Restarts remain under the administrator's control.
-
-### 7.5 Rollback
-
-- Automatic rollback on swap failure: `.old-contents` is restored to `contents/`.
-- Manual rollback: `--keep N` retains up to N previous trees as `.old-contents-N`. Off by default.
-- Data rollback is the app's problem, signalled by the schema marker ([§7.3](#s7.3)).
 
 ## 8. Relationship to other formats
 
@@ -304,15 +300,9 @@ Apps that persist structured data MUST maintain a migration path, and SHOULD rec
 ## 9. What this specification does not define
 
 - **The interior of `contents/` and `data/`.** Both are opaque to everything but the app. Tools MUST NOT depend on internal structure. The `bin/`, `lib/`, `resources/` split is a recommendation.
-- **Domain.** This format targets apps that are more than a single static binary: apps with resources too large to embed, apps that ship a language runtime or interpreter, apps with several files, and daemons. A self-contained single-file tool needs none of this and is out of scope.
-- **The language runtime.** Either bundled under `contents/` or assumed present on `PATH`. The spec does not prescribe which; it requires only that the bundle resolve and run without absolute install prefixes.
-- **Runtime version constraints.** The launcher checks and fails with a clear message. Not a manifest field.
-- **Multi-command tools.** A bundle exposes one `entrypoint`. Tools with subcommands ship their commands under `contents/bin/` and dispatch from the entry, or expose the primary command. A first-class `commands` table is not defined here.
-- **Library-only packages.** Not apps; out of scope.
-- **Migration from conventional layouts** (`~/.<name>`, XDG directories). Out of scope for this specification. A conforming installer MAY offer an adoption command; if it does, it MUST NOT leave the old location as a live fallback in steady state.
 - Menu entries, icon themes, MIME registration, sandboxing, supervision, autostart, or updates beyond [§7](#s7).
 - Daemon lifecycle: supervision, start and stop, restart policy.
-- Signing, dependency resolution, or repositories.
+- Signing, dependency resolution, repositories, or the source layouts an installer accepts ([§6](#s6)).
 
 ## 10. Conformance
 
@@ -335,7 +325,7 @@ This is the mechanical statement of confinement, and the test that catches the `
 
 ### 10.3 Other conformance
 
-An installer conforms if it satisfies [§6](#s6) and [§7](#s7).
+There is nothing else to conform to. A host, installer, or package manager conforms by producing and maintaining app roots of [§1](#s1), and by honouring the mutability rules of [§4](#s4). How it does that is its own business.
 
 ## Appendix A — Reference path modules
 

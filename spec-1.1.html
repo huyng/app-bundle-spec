@@ -511,7 +511,7 @@
 
     <h2 id="s1">1. App root</h2>
 
-    <p>Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory (<a class="xref" href="#s3.4">§3.4</a>) or the app declares a write location outside the root (<a class="xref" href="#s1.4">§1.4</a>).</p>
+    <p>Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory (<a class="xref" href="#s3.4">§3.4</a>). Writes the user asks for, to paths the user names, are the user's writes and live wherever the user says (<a class="xref" href="#s1.4">§1.4</a>).</p>
 
     <h3 id="s1.1">1.1 Scope</h3>
 
@@ -551,10 +551,10 @@
 
     <ul>
       <li><code>app.toml</code> is at the root because it describes the root. It is replaced on upgrade (<a class="xref" href="#s7">§7</a>) and is never written at runtime.</li>
-      <li><code>contents/</code> is the tree that ships. It is never modified at runtime.</li>
+      <li><code>contents/</code> is the tree that ships. It is never modified at runtime, and it is self-contained: dependencies are resolved when the tree is built and shipped inside it, and nothing is fetched when the app starts. A tree that bakes an absolute install prefix into its files is non-conforming. A launcher may compute absolute paths at runtime (<a class="xref" href="#s5.1">§5.1</a>); a build may not write them in.</li>
       <li><code>data/</code>, <code>cache/</code>, and <code>run/</code> are created by the app on first use.</li>
       <li>The names under <code>data/</code> are examples, not a layout. An app that keeps one SQLite file, a directory per document, or nothing at all conforms equally; only the directory itself and who may write to it are normative.</li>
-      <li>The app MUST NOT write outside its app root on its own initiative, except to a write location it declares in <code>app.toml</code> (<a class="xref" href="#s1.4">§1.4</a>). <code>contents/</code> is never written at all.</li>
+      <li>The app MUST NOT write outside its app root on its own initiative (<a class="xref" href="#s1.4">§1.4</a>). <code>contents/</code> is never written at all, by anyone, at runtime.</li>
     </ul>
 
     <h3 id="s1.3">1.3 Modes</h3>
@@ -606,6 +606,8 @@
 
     <p>TOML, at the app root. Unknown keys are ignored. All paths in the manifest are relative to the contents directory (<code>contents/</code>), regardless of the manifest's own location. Absolute paths are invalid.</p>
 
+    <p>The manifest describes the root, so the copy that ships is not always the copy that is authored. A manifest in a source tree MAY be incomplete, and an installer MAY generate the fields the source could not know (<a class="xref" href="#s6">§6</a>).</p>
+
     <h3 id="s2.1">2.1 Required fields</h3>
 
     <div class="table-wrap">
@@ -614,7 +616,7 @@
         <tbody>
           <tr><td><code>id</code></td><td>string</td><td>Unique identifier (<a class="xref" href="#s2.3">§2.3</a>). Stable across versions. Names the app root.</td></tr>
           <tr><td><code>name</code></td><td>string</td><td>Human-readable name.</td></tr>
-          <tr><td><code>version</code></td><td>string</td><td>Version string. Opaque to this specification.</td></tr>
+          <tr><td><code>version</code></td><td>string</td><td>Non-empty version string, opaque to this specification. MUST be present in an installed root; a source tree's manifest MAY omit it, and the installer then supplies it from the revision installed (<a class="xref" href="#s6">§6</a>). Display metadata only: see <a class="xref" href="#s2.5">§2.5</a>.</td></tr>
         </tbody>
       </table>
     </div>
@@ -659,9 +661,17 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <p>Both are confined.</p>
 
+    <p>Both declare a <code>version</code> because they are installed roots. The same manifest in a source tree may leave the line out and let the installer fill it in.</p>
+
     <p>The format does not distinguish app types. Desktop apps, command-line tools, and daemons use the same manifest and the same layout. How <code>entrypoint</code> is run — interactively, supervised, socket-activated — is outside this specification.</p>
 
-    <p><code>entrypoint</code> may be a native executable, a script with an interpreter directive, or a launcher that sets up an interpreted runtime and <code>exec</code>s the interpreter. The manifest does not distinguish these; the launcher is the sanctioned mechanism (<a class="xref" href="#s6.3">§6.3</a>).</p>
+    <p><code>entrypoint</code> may be a native executable, a script with an interpreter directive, or a launcher that sets up an interpreted runtime and <code>exec</code>s the interpreter. The manifest does not distinguish these; the launcher is the sanctioned mechanism (<a class="xref" href="#s5.1">§5.1</a>).</p>
+
+    <h3 id="s2.5">2.5 The version is not a compatibility signal</h3>
+
+    <p><code>version</code> says which build is installed and nothing more. It is display metadata for listing installed apps, and for a human reading <code>app.toml</code>. It MUST NOT be used to decide whether an upgrade is safe, whether data can be read, or whether two bundles are compatible: ordering opaque strings is not defined here, and a commit hash has no order at all.</p>
+
+    <p>The version that governs behaviour is the app's own, and it lives in <code>data/</code> (<a class="xref" href="#s7.3">§7.3</a>), not in the manifest.</p>
 
     <h2 id="s3">3. Runtime path resolution</h2>
 
@@ -713,7 +723,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
     </ul>
 
     <div class="note">
-      <p><strong>What <code>data/</code> is.</strong> It holds everything the app persists: settings, local databases, indexes, tokens, history, and any files whose lifecycle the app owns. It is the app's durable state, and it is the reason uninstall has two modes (<code>remove</code> keeps it; <code>remove --purge</code> does not).</p>
+      <p><strong>What <code>data/</code> is.</strong> It holds everything the app persists: settings, local databases, indexes, tokens, history, and any files whose lifecycle the app owns. It is the app's durable state, and it is the reason uninstall has two modes (a plain uninstall keeps it; a purge does not).</p>
 
       <p>It is not a general-purpose home for user documents. An app that manages files the user considers theirs (notes, projects, photos) SHOULD store them where the user chooses, naming a path at runtime (<a class="xref" href="#s1.4">§1.4</a>). Files in <code>data/</code> are expected to be backed up and restored with the app root, not browsed by the user.</p>
     </div>
@@ -737,42 +747,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li><code>entrypoint</code> runs in the foreground. Apps MUST NOT self-daemonize (no fork/setsid/double-fork).</li>
     </ul>
 
-    <p>Reference modules per language: <a href="#appa">Appendix A</a>.</p>
-
-    <h2 id="s6">6. Installation</h2>
-
-    <p>A conforming installer extracts a verified archive to the scope's app root and exposes <code>entrypoint</code>. The archive is a <code>.tar.gz</code> (<code>.zip</code> allowed) whose root holds exactly one directory named <code>&lt;id&gt;/</code>, containing <code>app.toml</code> and <code>contents/</code> and nothing else: no install scripts, no post-install hooks, no absolute build prefixes. Dependencies are resolved when the bundle is built and shipped flat inside <code>contents/</code>; a bundle MUST NOT ship a runtime environment that bakes in absolute paths, and MUST NOT fetch dependencies when it starts.</p>
-
-    <div class="table-wrap">
-      <table class="mono">
-        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th><th scope="col">Entry exposed as</th></tr></thead>
-        <tbody>
-          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td><td>~/.local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
-          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td><td>/usr/local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <ul>
-      <li>The installer MUST verify the archive conforms before extraction: exactly one <code>&lt;id&gt;/</code> at the archive root, <code>&lt;id&gt;/app.toml</code> present with valid required fields, and, when the manifest declares an <code>entrypoint</code>, <code>&lt;id&gt;/contents/&lt;entrypoint&gt;</code> an executable file.</li>
-      <li>Extraction MUST be atomic: unpack to a temp directory under the target parent, then <code>rename()</code> into place.</li>
-      <li>The installer MUST preserve executable bits and symlinks.</li>
-      <li>The installer MUST refuse to overwrite an existing <code>&lt;id&gt;</code> unless <code>--force</code>, and SHOULD warn when the existing manifest's <code>name</code> or <code>entrypoint</code> differs from the new one.</li>
-      <li>Scope is an installation decision, not a property of the bundle. The same archive installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of <a class="xref" href="#s6.1">§6.1</a>.</li>
-      <li>There are <strong>no install-time scripts</strong>. First-run setup is the app's job.</li>
-      <li>Uninstall removes <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> is removed only with explicit purge. What a non-purge uninstall leaves is <code>data/</code> alone, which is no longer an app root: without a manifest, <code>list</code> does not see it and <code>install</code> treats the <code>&lt;id&gt;</code> as absent.</li>
-      <li>Menu entries and MIME registration are out of scope. Hosts MAY derive them from <code>app.toml</code>; nothing requires it.</li>
-    </ul>
-
-    <h3 id="s6.1">6.1 Exposure</h3>
-
-    <p>The exposed entrypoint may be a symlink to <code>contents/&lt;entrypoint&gt;</code> or a wrapper script that sets <code>APP_ROOT</code> and <code>exec</code>s it. For a native executable, a symlink is sufficient. For an interpreted app, a wrapper is required (<a class="xref" href="#s6.3">§6.3</a>). At system scope the exposed entry MUST be a wrapper that sets <code>$APP_ROOT</code> to the installed root. There is no system default base in <a class="xref" href="#s3">§3</a>, so a symlink alone would resolve to <code>~/.apps/&lt;id&gt;</code> under whatever user ran it — or fail (<a class="xref" href="#s3">§3</a>).</p>
-
-    <h3 id="s6.2">6.2 What the installer does not do</h3>
-
-    <p>It does not parse state, run app code, register services, or restart daemons. Its entire job is: verify, extract, swap, link.</p>
-
-    <h3 id="s6.3">6.3 Launchers</h3>
+    <h3 id="s5.1">5.1 Launchers</h3>
 
     <p>An interpreted app ships a launcher at <code>entrypoint</code>. The launcher is a script with an interpreter directive, owned by the app, and is responsible for:</p>
 
@@ -785,33 +760,56 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <p>The launcher is the only file that must be executable in an interpreted bundle. See <a href="#appb">Appendix B</a> for examples.</p>
 
+    <p>Reference modules per language: <a href="#appa">Appendix A</a>.</p>
+
+    <h2 id="s6">6. Installation</h2>
+
+    <p>Installation produces a conforming app root (<a class="xref" href="#s1">§1</a>). How the installed files were obtained is outside this specification: an installer MAY accept a <code>.tar.gz</code> bundle, a plain directory, a git checkout, or any other source layout, provided what it produces is an app root.</p>
+
+    <ul>
+      <li>The app's files go in <code>contents/</code>; the manifest goes at the root. Because manifest paths resolve relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>), a source tree whose manifest sits beside its files is installed by moving the manifest up to the root and the rest down into <code>contents/</code>. That is the only transform a minimal installer needs.</li>
+      <li>An installer MAY generate fields the source tree could not know. <code>version</code> is the usual case: it is normally the revision that was installed (<a class="xref" href="#s2.1">§2.1</a>).</li>
+      <li>An installer SHOULD check the result before exposing it: <code>app.toml</code> present at the root with valid required fields, and, when one is declared, an executable <code>entrypoint</code> inside <code>contents/</code>. This is the test of <a class="xref" href="#s10.1">§10.1</a>, applied to whatever it just built.</li>
+      <li>In steady state the root holds <code>app.toml</code>, <code>contents/</code>, and whichever mutable directories exist. An installer MAY use temporary names in the root while swapping trees (<a class="xref" href="#s7.1">§7.1</a>); none may survive a completed install or upgrade.</li>
+      <li>An installer MUST preserve the executable bits and symlinks it finds in the tree, so that a declared <code>entrypoint</code> is an executable file inside <code>contents/</code>.</li>
+      <li>There are <strong>no install-time scripts</strong>. First-run setup is the app's job.</li>
+      <li>Uninstall removes <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> is removed only on explicit purge. What a non-purge uninstall leaves is <code>data/</code> alone, which is no longer an app root: it has no manifest, so a host that enumerates installed apps does not see it, and installing that <code>&lt;id&gt;</code> there again starts from nothing.</li>
+      <li>Menu entries and MIME registration are out of scope. Hosts MAY derive them from <code>app.toml</code>; nothing requires it.</li>
+    </ul>
+
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th><th scope="col">Entry exposed as</th></tr></thead>
+        <tbody>
+          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td><td>~/.local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
+          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td><td>/usr/local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of <a class="xref" href="#s6.1">§6.1</a>.</p>
+
+    <h3 id="s6.1">6.1 Exposure</h3>
+
+    <p>The exposed entrypoint may be a symlink to <code>contents/&lt;entrypoint&gt;</code> or a wrapper script that sets <code>APP_ROOT</code> and <code>exec</code>s it. For a native executable, a symlink is sufficient. For an interpreted app, a wrapper is required (<a class="xref" href="#s5.1">§5.1</a>). At system scope the exposed entry MUST be a wrapper that sets <code>$APP_ROOT</code> to the installed root. There is no system default base in <a class="xref" href="#s3">§3</a>, so a symlink alone would resolve to <code>~/.apps/&lt;id&gt;</code> under whatever user ran it — or fail (<a class="xref" href="#s3">§3</a>).</p>
+
+    <h3 id="s6.2">6.2 What the installer does not do</h3>
+
+    <p>It does not parse state, run app code, register services, or restart daemons. It does not interpret <code>data/</code> (<a class="xref" href="#s7.3">§7.3</a>). Its entire job is to produce a conforming root and expose <code>entrypoint</code>.</p>
+
     <h2 id="s7">7. Upgrading</h2>
 
     <p>An upgrade replaces <code>contents/</code> and <code>app.toml</code> and MUST NOT modify <code>data/</code>, <code>cache/</code>, or <code>run/</code>.</p>
 
-    <h3 id="s7.1">7.1 Procedure</h3>
+    <h3 id="s7.1">7.1 The swap</h3>
 
-    <ol>
-      <li>Verify the new archive conforms (<a class="xref" href="#s6">§6</a>).</li>
-      <li>Extract to <code>&lt;app-root&gt;/.staging-&lt;id&gt;/</code> — same filesystem as the root, so each swap is atomic.</li>
-      <li>Swap the tree:
-        <ul>
-          <li><code>rename(&lt;app-root&gt;/contents, &lt;app-root&gt;/.old-contents)</code></li>
-          <li><code>rename(&lt;app-root&gt;/.staging-&lt;id&gt;/contents, &lt;app-root&gt;/contents)</code></li>
-        </ul>
-        Where available, <code>renameat2(RENAME_EXCHANGE)</code> performs this in one step and is preferred.
-      </li>
-      <li>Replace the manifest atomically: write the new <code>app.toml</code> to a temporary file in the app root, then <code>rename()</code> it over the old one.</li>
-      <li>Delete <code>.old-contents</code> on success. If the second tree rename fails, restore <code>.old-contents</code> → <code>contents/</code>.</li>
-      <li>Update the exposure symlink or wrapper if the entrypoint name changed.</li>
-    </ol>
+    <p>The new tree is assembled somewhere other than <code>contents/</code> and moved into place whole, on the same filesystem, so that <code>contents/</code> is always either the old tree or the new one and never a mixture. Two <code>rename()</code> calls — old tree aside, new tree in — satisfy this; where available, <code>renameat2(RENAME_EXCHANGE)</code> does it in one step. <code>app.toml</code> is replaced as a single file, never edited in place.</p>
 
-    <p>A partially-extracted tree MUST never be visible as <code>contents/</code>.</p>
+    <p>A swap that fails leaves the previous tree in place.</p>
 
     <h3 id="s7.2">7.2 Rules</h3>
 
     <ul>
-      <li>The installer MUST refuse to upgrade across a scope change (user ↔ system) without an explicit flag. A scope change is visible in the filesystem, not in the archive: if <code>&lt;id&gt;</code> is already installed at the other scope, this is one.</li>
       <li>The installer MUST refuse to upgrade when the new manifest's <code>id</code> differs from the directory name.</li>
       <li>The installer MUST NOT touch <code>data/</code>, <code>cache/</code>, or <code>run/</code>. Data migration is the app's responsibility.</li>
       <li>The installer MUST NOT restart daemons. Daemons pick up the new tree when supervision restarts them.</li>
@@ -824,23 +822,14 @@ entrypoint = "bin/monitord"</code></pre></figure>
     <ul>
       <li>On startup, the app compares the marker against the version its code expects and migrates forward if needed.</li>
       <li>Downgrade safety is the app's responsibility: it detects too-new data via the marker and either migrates backward or refuses to start with a clear message.</li>
-      <li>The installer never interprets <code>data/</code>.</li>
     </ul>
 
     <h3 id="s7.4">7.4 Running processes</h3>
 
     <ul>
-      <li><strong>Native executables.</strong> On Linux, <code>rename()</code> over a running executable's path is safe: the running process keeps the old inode until it exits. New launches get the new tree, and <code>.old-contents</code> can be removed immediately.</li>
+      <li><strong>Native executables.</strong> On Linux, <code>rename()</code> over a running executable's path is safe: the running process keeps the old inode until it exits, so new launches get the new tree while the old one drains away.</li>
       <li><strong>Interpreted apps.</strong> The old-inode guarantee does not apply. A running interpreter reads <code>contents/</code> lazily, so an upgrade during execution can mix old in-memory code with new files on disk. Upgrading a running interpreted app is unsafe. Interactive apps SHOULD detect that their tree changed (for example, by comparing a build identifier recorded at startup) and refuse to continue or offer to restart. Apps that cannot do this MUST document that they may only be upgraded while stopped, because an installer cannot see what is running (<a class="xref" href="#s6.2">§6.2</a>).</li>
       <li><strong>Daemons.</strong> The installer leaves the new tree in place and lets supervision restart the service on its own schedule. Restarts remain under the administrator's control.</li>
-    </ul>
-
-    <h3 id="s7.5">7.5 Rollback</h3>
-
-    <ul>
-      <li>Automatic rollback on swap failure: <code>.old-contents</code> is restored to <code>contents/</code>.</li>
-      <li>Manual rollback: <code>--keep N</code> retains up to N previous trees as <code>.old-contents-N</code>. Off by default.</li>
-      <li>Data rollback is the app's problem, signalled by the schema marker (<a class="xref" href="#s7.3">§7.3</a>).</li>
     </ul>
 
     <h2 id="s8">8. Relationship to other formats</h2>
@@ -859,15 +848,9 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ul>
       <li><strong>The interior of <code>contents/</code> and <code>data/</code>.</strong> Both are opaque to everything but the app. Tools MUST NOT depend on internal structure. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is a recommendation.</li>
-      <li><strong>Domain.</strong> This format targets apps that are more than a single static binary: apps with resources too large to embed, apps that ship a language runtime or interpreter, apps with several files, and daemons. A self-contained single-file tool needs none of this and is out of scope.</li>
-      <li><strong>The language runtime.</strong> Either bundled under <code>contents/</code> or assumed present on <code>PATH</code>. The spec does not prescribe which; it requires only that the bundle resolve and run without absolute install prefixes.</li>
-      <li><strong>Runtime version constraints.</strong> The launcher checks and fails with a clear message. Not a manifest field.</li>
-      <li><strong>Multi-command tools.</strong> A bundle exposes one <code>entrypoint</code>. Tools with subcommands ship their commands under <code>contents/bin/</code> and dispatch from the entry, or expose the primary command. A first-class <code>commands</code> table is not defined here.</li>
-      <li><strong>Library-only packages.</strong> Not apps; out of scope.</li>
-      <li><strong>Migration from conventional layouts</strong> (<code>~/.&lt;name&gt;</code>, XDG directories). Out of scope for this specification. A conforming installer MAY offer an adoption command; if it does, it MUST NOT leave the old location as a live fallback in steady state.</li>
       <li>Menu entries, icon themes, MIME registration, sandboxing, supervision, autostart, or updates beyond <a class="xref" href="#s7">§7</a>.</li>
       <li>Daemon lifecycle: supervision, start and stop, restart policy.</li>
-      <li>Signing, dependency resolution, or repositories.</li>
+      <li>Signing, dependency resolution, repositories, or the source layouts an installer accepts (<a class="xref" href="#s6">§6</a>).</li>
     </ul>
 
     <h2 id="s10">10. Conformance</h2>
@@ -893,7 +876,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <h3 id="s10.3">10.3 Other conformance</h3>
 
-    <p>An installer conforms if it satisfies <a class="xref" href="#s6">§6</a> and <a class="xref" href="#s7">§7</a>.</p>
+    <p>There is nothing else to conform to. A host, installer, or package manager conforms by producing and maintaining app roots of <a class="xref" href="#s1">§1</a>, and by honouring the mutability rules of <a class="xref" href="#s4">§4</a>. How it does that is its own business.</p>
 
     <h2 id="appa">Appendix A — Reference path modules</h2>
 
