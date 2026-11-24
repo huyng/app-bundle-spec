@@ -497,13 +497,15 @@
         <li><a href="#s5">In-code convention</a></li>
         <li><a href="#s6">Installation</a></li>
         <li><a href="#s7">Upgrading</a></li>
-        <li><a href="#s8">Relationship to other formats</a></li>
-        <li><a href="#s9">What this specification does not define</a></li>
-        <li><a href="#s10">Conformance</a></li>
+        <li><a href="#s8">Uninstallation</a></li>
+        <li><a href="#s9">Relationship to other formats</a></li>
+        <li><a href="#s10">What this specification does not define</a></li>
+        <li><a href="#s11">Conformance</a></li>
       </ol>
       <ul class="appendix">
         <li><a href="#appa">Appendix A — Reference path modules</a></li>
         <li><a href="#appb">Appendix B — Bundle templates</a></li>
+        <li><a href="#appc">Appendix C — Glossary</a></li>
       </ul>
     </nav>
 
@@ -511,9 +513,11 @@
 
     <h2 id="s1">1. App root</h2>
 
-    <p>Every app has exactly one root directory. Everything the app writes on its own initiative lives inside it, except where a supervisor relocates an individual mutable directory (<a class="xref" href="#s3.1">§3.1</a>). Writes the user asks for, to paths the user names, are the user's writes and live wherever the user says (<a class="xref" href="#s1.4">§1.4</a>).</p>
+    <p>Every app has exactly one root directory. Executables, configuration, resources, caches, runtime files, etc, all live under this root. They are not spread across many directories in the standard filesystem heirarchy.</p>
 
     <h3 id="s1.1">1.1 Scope</h3>
+
+    <p>Apps are installed within a scope: either system-wide or on a per-user basis.</p>
 
     <div class="table-wrap">
       <table class="mono">
@@ -544,7 +548,7 @@
 └── run/              <span class="t-c"># ephemeral; cleared or ignored on startup</span></pre></figure>
 
     <div class="note">
-      <p><strong>The interiors of <code>contents/</code> and <code>data/</code> are conventions, not requirements.</strong> The files shown under each are illustrations of a typical shape. Three facts about <code>contents/</code> are normative: it exists, nothing in it is written at runtime, and if <code>app.toml</code> declares an <code>entrypoint</code> that path resolves to an executable file inside it. A bundle with <code>contents/bin/foo</code> and nothing else conforms. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is the recommended shape for bundles that need it, and nothing outside the app may depend on it.</p>
+      <p><strong>The interiors of <code>contents/</code> and <code>data/</code> are conventions, not requirements.</strong> The files shown under each are only examples of a typical shape. Three facts about <code>contents/</code> are normative: it exists, nothing in it is written at runtime, and if <code>app.toml</code> declares an <code>entrypoint</code> that path resolves to an executable file inside it. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is the recommended shape for bundles that need it, and nothing outside the app may depend on it.</p>
     </div>
 
     <ul>
@@ -552,7 +556,6 @@
       <li><code>contents/</code> is the tree that ships. It is never modified at runtime, and it is self-contained: dependencies are resolved when the tree is built and shipped inside it, and nothing is fetched when the app starts. A tree that bakes an absolute install prefix into its files is non-conforming. A launcher may compute absolute paths at runtime (<a class="xref" href="#s5.1">§5.1</a>); a build may not write them in.</li>
       <li><code>data/</code>, <code>cache/</code>, and <code>run/</code> are created by the app on first use.</li>
       <li>The names under <code>data/</code> are examples, not a layout. An app that keeps one SQLite file, a directory per document, or nothing at all conforms equally; only the directory itself and who may write to it are normative.</li>
-      <li>The app MUST NOT write outside its app root on its own initiative (<a class="xref" href="#s1.4">§1.4</a>). <code>contents/</code> is never written at all, by anyone, at runtime.</li>
     </ul>
 
     <h3 id="s1.3">1.3 Modes</h3>
@@ -630,7 +633,6 @@
           <tr><td><code>description</code></td><td>string</td><td>Short description.</td></tr>
           <tr><td><code>license</code></td><td>string</td><td>SPDX license identifier.</td></tr>
           <tr><td><code>homepage</code></td><td>string</td><td>URL.</td></tr>
-          <tr><td><code>[mime]</code></td><td>table</td><td><code>handles = ["type/subtype", ...]</code> — file types the app opens.</td></tr>
         </tbody>
       </table>
     </div>
@@ -667,20 +669,18 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <h3 id="s2.5">2.5 The version is not a compatibility signal</h3>
 
-    <p><code>version</code> says which build is installed and nothing more. It is display metadata for listing installed apps, and for a human reading <code>app.toml</code>. It MUST NOT be used to decide whether an upgrade is safe, whether data can be read, or whether two bundles are compatible: ordering opaque strings is not defined here, and a commit hash has no order at all.</p>
-
-    <p>The version that governs behaviour is the app's own, and it lives in <code>data/</code> (<a class="xref" href="#s7.3">§7.3</a>), not in the manifest.</p>
+    <p><code>version</code> says which build is installed and nothing more. It is display metadata for listing installed apps, and for a human reading <code>app.toml</code>.</p>
 
     <h2 id="s3">3. Runtime path resolution</h2>
 
-    <p>The app root is derived, not configured. An installed app always knows where it is, because its entrypoint is inside <code>contents/</code> (<a class="xref" href="#s10.1">§10.1</a>): the root is the nearest ancestor of the entrypoint's own real location that holds <code>app.toml</code>. Nothing needs to be passed in and nothing needs to be compiled in.</p>
+    <p>The app root is derived, not configured. An installed app always knows where it is, because its entrypoint is inside <code>contents/</code> (<a class="xref" href="#s11.1">§11.1</a>): the root is the nearest ancestor of the entrypoint's own real location that holds <code>app.toml</code>. Nothing needs to be passed in and nothing needs to be compiled in.</p>
 
     <ol>
       <li><code>$APP_ROOT</code>, when set and non-empty, is the app root. The app MUST resolve symlinks and use the real path, and MUST fail with a clear message when that path holds no <code>app.toml</code>. An invented root would scatter the app's writes into an unrelated directory.</li>
       <li>Otherwise the app root is the nearest ancestor of the running program's real location that holds <code>app.toml</code>. A native executable starts from <code>/proc/self/exe</code> or its equivalent. An interpreted app starts from its own resolved location: the launcher walks up from its real path and exports <code>$APP_ROOT</code> (<a class="xref" href="#s5.1">§5.1</a>), or the code does the same from its module's resolved path. If no ancestor holds <code>app.toml</code>, the app MUST fail with a clear message rather than fall back to a guess.</li>
     </ol>
 
-    <p>The contents directory is <code>&lt;app-root&gt;/contents/</code>. The manifest is <code>&lt;app-root&gt;/app.toml</code>. Every file the app reads at runtime is found relative to it: a file at <code>&lt;path&gt;</code> inside <code>contents/</code> is read as <code>app_contents_dir()/&lt;path&gt;</code>. The shape of <code>contents/</code> is the app's own choice (<a class="xref" href="#s1.2">§1.2</a>).</p>
+    <p>The contents directory is <code>&lt;app-root&gt;/contents/</code>. The manifest is <code>&lt;app-root&gt;/app.toml</code>. Every file the app reads at runtime is found relative to it: a file at <code>&lt;path&gt;</code> inside <code>contents/</code> is read as <code>contents_dir()/&lt;path&gt;</code>. The shape of <code>contents/</code> is the app's own choice (<a class="xref" href="#s1.2">§1.2</a>).</p>
 
     <div class="note">
       <p><strong>Why an environment variable at all.</strong> A native executable finds its own root from <code>/proc/self/exe</code>. An interpreter cannot: the running program is <code>python3</code>, and <code>/proc/self/exe</code> is the interpreter, not the app. The launcher bridges that gap by exporting <code>$APP_ROOT</code>. An installed app of either kind runs correctly with <code>$APP_ROOT</code> unset; launchers and development harnesses set it when the tree they run is not a real tree, such as a symlinked <code>contents/</code> or a temporary root.</p>
@@ -688,7 +688,30 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <h3 id="s3.1">3.1 Relocated mutable directories</h3>
 
-    <p>Each mutable directory MAY be relocated individually by <code>$APP_DATA_DIR</code>, <code>$APP_CACHE_DIR</code>, and <code>$APP_RUN_DIR</code> (absolute paths). Unset means inside the app root. This exists for supervisors that mandate <code>/var/lib/&lt;id&gt;</code>, <code>/var/cache/&lt;id&gt;</code>, and <code>/run/&lt;id&gt;</code>. When used, the app treats them as its mutable directories. They are invisible to the installer: nothing in the manifest records them, and purging them is the supervisor's business, not the installer's.</p>
+    <p>Each mutable directory MAY be relocated individually by the variable that names it (<a class="xref" href="#s3.2">§3.2</a>). When used, the app treats the target as its mutable directory. This exists for supervisors that mandate <code>/var/lib/&lt;id&gt;</code>, <code>/var/cache/&lt;id&gt;</code>, and <code>/run/&lt;id&gt;</code>. Relocated directories are invisible to the installer: nothing in the manifest records them, and purging them is the supervisor's business, not the installer's.</p>
+
+    <h3 id="s3.2">3.2 Environment variables</h3>
+
+    <p>These four are the whole of the specification's environment. Each is an absolute path and is optional; an installed app runs correctly with none of them set.</p>
+
+    <div class="table-wrap">
+      <table class="mono">
+        <thead><tr><th scope="col">Variable</th><th scope="col">Sets</th><th scope="col">When unset</th></tr></thead>
+        <tbody>
+          <tr><td><code>$APP_ROOT</code></td><td>the app root</td><td>derived from the entrypoint's real location (<a class="xref" href="#s3">§3</a>)</td></tr>
+          <tr><td><code>$APP_DATA_DIR</code></td><td><code>data/</code></td><td><code>&lt;app-root&gt;/data/</code></td></tr>
+          <tr><td><code>$APP_CACHE_DIR</code></td><td><code>cache/</code></td><td><code>&lt;app-root&gt;/cache/</code></td></tr>
+          <tr><td><code>$APP_RUN_DIR</code></td><td><code>run/</code></td><td><code>&lt;app-root&gt;/run/</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li>A value that is set but empty counts as unset, matching the behaviour of an unset variable in most shells.</li>
+      <li><code>$APP_ROOT</code> is an override, not a requirement: it exists for launchers (<a class="xref" href="#s5.1">§5.1</a>), exposure wrappers (<a class="xref" href="#s6.1">§6.1</a>), and development harnesses whose tree is not a real one. An app MUST still work with it unset, and MUST fail clearly when it is set to a directory holding no <code>app.toml</code>.</li>
+      <li>Nothing else in the environment is this specification's to define. Variables an app invents for its own use are its own; variables a runtime needs are the runtime's, and the launcher sets them (<a class="xref" href="#s5.1">§5.1</a>).</li>
+      <li>Environment variables are not a configuration mechanism. Nothing in <code>app.toml</code> maps to an environment variable, and nothing here maps to a manifest field. Settings are the app's own business, in <code>data/</code> (<a class="xref" href="#s4">§4</a>).</li>
+    </ul>
 
     <h2 id="s4">4. Mutable directories</h2>
 
@@ -736,7 +759,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ul>
       <li><code>app_root()</code> — per <a class="xref" href="#s3">§3</a>.</li>
-      <li><code>app_contents_dir()</code> — <code>app_root()/contents/</code>.</li>
+      <li><code>contents_dir()</code> — <code>app_root()/contents/</code>.</li>
       <li><code>data_dir()</code>, <code>cache_dir()</code>, <code>run_dir()</code> — per <a class="xref" href="#s4">§4</a>, created on demand with the modes of <a class="xref" href="#s1.3">§1.3</a>.</li>
     </ul>
 
@@ -764,11 +787,10 @@ entrypoint = "bin/monitord"</code></pre></figure>
     <ul>
       <li>The app's files go in <code>contents/</code>; the manifest goes at the root. Because manifest paths resolve relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>), a source tree whose manifest sits beside its files is installed by moving the manifest up to the root and the rest down into <code>contents/</code>. That is the only transform a minimal installer needs.</li>
       <li>An installer MAY generate fields the source tree could not know. <code>version</code> is the usual case: it is normally the revision that was installed (<a class="xref" href="#s2.1">§2.1</a>).</li>
-      <li>An installer SHOULD check the result before exposing it: <code>app.toml</code> present at the root with valid required fields, and, when one is declared, an executable <code>entrypoint</code> inside <code>contents/</code>. This is the test of <a class="xref" href="#s10.1">§10.1</a>, applied to whatever it just built.</li>
+      <li>An installer SHOULD check the result before exposing it: <code>app.toml</code> present at the root with valid required fields, and, when one is declared, an executable <code>entrypoint</code> inside <code>contents/</code>. This is the test of <a class="xref" href="#s11.1">§11.1</a>, applied to whatever it just built.</li>
       <li>In steady state the root holds <code>app.toml</code>, <code>contents/</code>, and whichever mutable directories exist. An installer MAY use temporary names in the root while swapping trees (<a class="xref" href="#s7.1">§7.1</a>); none may survive a completed install or upgrade.</li>
       <li>An installer MUST preserve the executable bits and symlinks it finds in the tree, so that a declared <code>entrypoint</code> is an executable file inside <code>contents/</code>.</li>
       <li>There are <strong>no install-time scripts</strong>. First-run setup is the app's job.</li>
-      <li>Uninstall removes <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> is removed only on explicit purge. What a non-purge uninstall leaves is <code>data/</code> alone, which is no longer an app root: it has no manifest, so a host that enumerates installed apps does not see it, and installing that <code>&lt;id&gt;</code> there again starts from nothing.</li>
       <li>Menu entries and MIME registration are out of scope. Hosts MAY derive them from <code>app.toml</code>; nothing requires it.</li>
     </ul>
 
@@ -823,7 +845,37 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li><strong>Daemons.</strong> The installer leaves the new tree in place and lets supervision restart the service on its own schedule. Restarts remain under the administrator's control.</li>
     </ul>
 
-    <h2 id="s8">8. Relationship to other formats</h2>
+    <h2 id="s8">8. Uninstallation</h2>
+
+    <p>An uninstall removes an installation and nothing else. There are two modes: a plain uninstall, which keeps <code>data/</code>, and a purge, which does not. Deleting the app root by hand is a purge; the plain uninstall is the root minus <code>data/</code>.</p>
+
+    <h3 id="s8.1">8.1 Order</h3>
+
+    <p>An uninstall proceeds in this order:</p>
+
+    <ol>
+      <li>The exposure (<a class="xref" href="#s6.1">§6.1</a>), when it points into this root.</li>
+      <li><code>contents/</code>, <code>cache/</code>, and <code>run/</code>.</li>
+      <li><code>app.toml</code>.</li>
+      <li><code>data/</code>, on purge only.</li>
+      <li>The root directory itself, once it is empty.</li>
+    </ol>
+
+    <p>Each step leaves a state that can be read: nothing is exposed into a tree that has lost its executable, and nothing still enumerates as an installed app once <code>contents/</code> is gone. An uninstall interrupted at any point therefore leaves either a working installation or a root that is no longer one.</p>
+
+    <h3 id="s8.2">8.2 Rules</h3>
+
+    <ul>
+      <li>An installer MUST NOT remove a directory that holds no <code>app.toml</code>. A missing manifest means there is no installation to remove: a leftover <code>data/</code>, a mistyped <code>&lt;id&gt;</code>, or an unrelated directory.</li>
+      <li>Purge MUST be an explicit choice. No default uninstall removes <code>data/</code>.</li>
+      <li>A relocated mutable directory (<a class="xref" href="#s3.1">§3.1</a>) lies outside the root, and removing it is the supervisor's business, not the installer's.</li>
+      <li>Uninstall does not stop the app. A running process keeps its executable, so <code>contents/</code> can be removed while it runs; an interpreted app reads its tree lazily and may fail midway (<a class="xref" href="#s7.4">§7.4</a>). That is a consequence of uninstalling a running app, not a condition the installer can prevent.</li>
+      <li>When nothing is installed for <code>&lt;id&gt;</code>, an installer SHOULD report that and change nothing.</li>
+    </ul>
+
+    <p>What a plain uninstall leaves is <code>data/</code> alone. That is not an app root: it has no manifest, so a host that enumerates installed apps does not see it, and installing that <code>&lt;id&gt;</code> again adopts it.</p>
+
+    <h2 id="s9">9. Relationship to other formats</h2>
 
     <ul>
       <li><strong>macOS <code>.app</code>.</strong> The closest structural analogue, and the source of the name: <code>Contents/</code> plays the role of <code>contents/</code>, <code>Info.plist</code> that of <code>app.toml</code>, and <code>CFBundleIdentifier</code> that of <code>id</code>. macOS keeps mutable data <em>outside</em> the bundle (<code>~/Library/Application Support/&lt;id&gt;/</code>, <code>~/Library/Caches/&lt;id&gt;/</code>) because the bundle is code-signed and the seal covers <code>Contents/</code>. This format internalizes mutable data because the root, not the bundle, is the unit: the point is that deleting the root is a complete uninstall. macOS's externalization is why uninstalling a Mac app leaves a dozen directories behind.</li>
@@ -831,11 +883,12 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li><strong>systemd's <code>StateDirectory=</code>, <code>CacheDirectory=</code>, <code>RuntimeDirectory=</code>.</strong> The same three roles, externally managed. A generated unit file can express this layout in four lines, and under <code>ProtectSystem=strict</code> those directives are also the write whitelist. This is the strongest external argument for the taxonomy. Note that <code>RuntimeDirectory=</code> is removed on stop, which is stronger than "cleared on startup."</li>
       <li><strong>Homebrew.</strong> A keg is the closest structural match to <code>contents/</code>, but keg state lives in a shared prefix <code>var/</code>, which is why uninstall leaves data behind and needs per-formula cleanup stanzas. Homebrew also patches absolute paths at install time; this format requires no patching because resolution is runtime-relative.</li>
       <li><strong>Nix.</strong> A store path is the purest immutable-tree model, and generation symlinks are a cleaner atomic-swap mechanism than the two-<code>rename()</code> procedure here. Nix bakes absolute store paths into binaries, which is what makes trees non-relocatable; this format goes the other way and forbids baked prefixes.</li>
-      <li><strong>Containers and sandbox packages.</strong> macOS/iOS app containers, Android's per-package <code>/data/data/&lt;pkg&gt;/</code>, and Windows MSIX package containers all internalize mutable data and enforce the root as a unit. They enforce it with the kernel; this format enforces it with convention (<a class="xref" href="#s10.2">§10.2</a>).</li>
+      <li><strong>Python wheels.</strong> A wheel is a ZIP of a package plus its <code>.dist-info/</code>, which does the job of <code>app.toml</code>: <code>METADATA</code>, <code>entry_points.txt</code>, <code>RECORD</code>. But it installs <em>into</em> a shared <code>site-packages</code>, so uninstall is a list of scattered files rather than one directory, and it has no <code>data/</code>. Its <code>RECORD</code> is the hash list this format lacks.</li>
+      <li><strong>Containers and sandbox packages.</strong> macOS/iOS app containers, Android's per-package <code>/data/data/&lt;pkg&gt;/</code>, and Windows MSIX package containers all internalize mutable data and enforce the root as a unit. They enforce it with the kernel; this format enforces it with convention (<a class="xref" href="#s11.2">§11.2</a>).</li>
       <li><strong>Flatpak / Snap / AppImage.</strong> Runtimes with sandboxing and their own integration conventions. This format is layout only.</li>
     </ul>
 
-    <h2 id="s9">9. What this specification does not define</h2>
+    <h2 id="s10">10. What this specification does not define</h2>
 
     <ul>
       <li><strong>The interior of <code>contents/</code> and <code>data/</code>.</strong> Both are opaque to everything but the app. Tools MUST NOT depend on internal structure. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is a recommendation.</li>
@@ -844,9 +897,9 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li>Signing, dependency resolution, repositories, or the source layouts an installer accepts (<a class="xref" href="#s6">§6</a>).</li>
     </ul>
 
-    <h2 id="s10">10. Conformance</h2>
+    <h2 id="s11">11. Conformance</h2>
 
-    <h3 id="s10.1">10.1 An app</h3>
+    <h3 id="s11.1">11.1 An app</h3>
 
     <p>An app conforms if:</p>
 
@@ -859,13 +912,13 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li>It writes on its own initiative only inside its mutable directories (<a class="xref" href="#s1.4">§1.4</a>). Paths the user names at runtime are written as given and are not a conformance question.</li>
     </ol>
 
-    <h3 id="s10.2">10.2 The confinement test</h3>
+    <h3 id="s11.2">11.2 The confinement test</h3>
 
     <p>Make two fresh directories: an app root, holding the bundle's <code>app.toml</code> and <code>contents/</code>, and a <code>home/</code> holding one marker file. Set <code>APP_ROOT</code> to the root and <code>HOME</code> to <code>home/</code>, and give the app no outside path to write to. Run it once that way, and once with <code>$APP_ROOT</code> unset and through a symlink to its entrypoint, so that it must find the root from its own location (<a class="xref" href="#s3">§3</a>). Both runs MUST resolve to the same root. Afterwards the marker MUST be unchanged, and the two directories MUST hold nothing beyond what was put there.</p>
 
     <p>This is the mechanical statement of confinement, and the test that catches the <code>~/.&lt;name&gt;</code> habit. Because it measures what the app does on its own, a run in which an outside path is named proves nothing and does not belong here.</p>
 
-    <h3 id="s10.3">10.3 Other conformance</h3>
+    <h3 id="s11.3">11.3 Other conformance</h3>
 
     <p>There is nothing else to conform to. A host, installer, or package manager conforms by producing and maintaining app roots of <a class="xref" href="#s1">§1</a>, and by honouring the mutability rules of <a class="xref" href="#s4">§4</a>. How it does that is its own business.</p>
 
@@ -894,7 +947,7 @@ def app_root() -&gt; pathlib.Path:
     return d
 
 
-def app_contents_dir() -&gt; pathlib.Path:
+def contents_dir() -&gt; pathlib.Path:
     return app_root() / "contents"
 
 
@@ -933,7 +986,7 @@ pub fn app_root() -&gt; PathBuf {
     d
 }
 
-pub fn app_contents_dir() -&gt; PathBuf {
+pub fn contents_dir() -&gt; PathBuf {
     app_root().join("contents")
 }
 
@@ -997,7 +1050,7 @@ func real(p string) string {
 	return r
 }
 
-func appContentsDir() string { return filepath.Join(appRoot(), "contents") }
+func contentsDir() string { return filepath.Join(appRoot(), "contents") }
 
 func dir(env, def string) string {
 	d := os.Getenv(env)
@@ -1093,6 +1146,44 @@ dev: bundle
     "dev": "npm run bundle &amp;&amp; ./scripts/run-dev.sh build/org.example.notepad"
   }
 }</code></pre></figure>
+
+    <h2 id="appc">Appendix C — Glossary</h2>
+
+    <p>The words this specification uses in a particular sense, alphabetically. Each entry points at the section that defines it.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>App root</strong></td><td>The one directory that is an app: <code>app.toml</code>, <code>contents/</code>, and whichever mutable directories exist (<a class="xref" href="#s1">§1</a>). Copy to install, delete to uninstall.</td></tr>
+          <tr><td><strong>Baked prefix</strong></td><td>An absolute install path written into a file inside <code>contents/</code>. Non-conforming, because the tree must stay relocatable (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
+          <tr><td><strong>Bundle</strong></td><td>An app root as distributed — <code>contents/</code> and its manifest — before an installer places it.</td></tr>
+          <tr><td><strong><code>cache/</code></strong></td><td>Regenerable mutable directory. Deletable at any time without losing user data (<a class="xref" href="#s4">§4</a>).</td></tr>
+          <tr><td><strong>Confinement</strong></td><td>Writing nothing outside the mutable directories and the paths the user names (<a class="xref" href="#s1.4">§1.4</a>).</td></tr>
+          <tr><td><strong><code>contents/</code></strong></td><td>The immutable tree that ships. It exists, it is never written at runtime, and it holds the entrypoint (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
+          <tr><td><strong><code>data/</code></strong></td><td>Durable mutable directory. Survives upgrades and machine restarts, and is removed only on purge (<a class="xref" href="#s4">§4</a>).</td></tr>
+          <tr><td><strong>Entrypoint</strong></td><td>The manifest field naming an executable inside <code>contents/</code>, run in the foreground (<a class="xref" href="#s2.2">§2.2</a>).</td></tr>
+          <tr><td><strong>Exposure</strong></td><td>The symlink or wrapper in a <code>PATH</code> directory through which an installed <code>entrypoint</code> is invoked (<a class="xref" href="#s6.1">§6.1</a>).</td></tr>
+          <tr><td><strong>Host</strong></td><td>Software that lists, launches, or draws integration from installed roots: a launcher menu, a file manager, a listing tool. Not the installer (<a class="xref" href="#s11.3">§11.3</a>).</td></tr>
+          <tr><td><strong><code>id</code></strong></td><td>Lowercase, dot-separated identifier. It names the app root, is stable across versions, and is self-asserted rather than verified (<a class="xref" href="#s2.3">§2.3</a>).</td></tr>
+          <tr><td><strong>Installer</strong></td><td>Software that produces a conforming app root and exposes its <code>entrypoint</code>. It accepts any source layout (<a class="xref" href="#s6">§6</a>).</td></tr>
+          <tr><td><strong>Launcher</strong></td><td>The script an interpreted app ships at <code>entrypoint</code>. It finds the root, prepares the runtime, and <code>exec</code>s the interpreter (<a class="xref" href="#s5.1">§5.1</a>).</td></tr>
+          <tr><td><strong>Manifest</strong></td><td><code>app.toml</code>. TOML at the app root, describing the root. Its paths are relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>).</td></tr>
+          <tr><td><strong>Mutable directory</strong></td><td>One of <code>data/</code>, <code>cache/</code>, and <code>run/</code>: the only places the app writes on its own initiative (<a class="xref" href="#s4">§4</a>).</td></tr>
+          <tr><td><strong>Purge</strong></td><td>An uninstall that also removes <code>data/</code>. A plain uninstall keeps it (<a class="xref" href="#s8">§8</a>).</td></tr>
+          <tr><td><strong>Relocated mutable directory</strong></td><td>A mutable directory moved outside the app root by a supervisor, through the variable that names it (<a class="xref" href="#s3.1">§3.1</a>).</td></tr>
+          <tr><td><strong>Root override</strong></td><td><code>$APP_ROOT</code>. It names the app root directly. An override, not a requirement: only needed when the tree being run is not a real one (<a class="xref" href="#s3.2">§3.2</a>).</td></tr>
+          <tr><td><strong><code>run/</code></strong></td><td>Session-scoped mutable directory, cleared or ignored on every startup (<a class="xref" href="#s4">§4</a>).</td></tr>
+          <tr><td><strong>Schema marker</strong></td><td><code>data/version</code>. The app's own data-format version, compared at startup. Unrelated to the manifest's <code>version</code> (<a class="xref" href="#s7.3">§7.3</a>).</td></tr>
+          <tr><td><strong>Scope</strong></td><td>Per-user or system. An installation decision, and not recorded in the manifest (<a class="xref" href="#s1.1">§1.1</a>).</td></tr>
+          <tr><td><strong>Self-contained</strong></td><td>Dependencies resolved at build time and shipped inside <code>contents/</code>, with nothing fetched at startup (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
+          <tr><td><strong>Swap</strong></td><td>Replacing <code>contents/</code> and <code>app.toml</code> as a unit, so that <code>contents/</code> is never a mixture of two trees (<a class="xref" href="#s7.1">§7.1</a>).</td></tr>
+          <tr><td><strong>Uninstall</strong></td><td>Removing an installation: its exposure, <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> goes only on purge (<a class="xref" href="#s8">§8</a>).</td></tr>
+          <tr><td><strong>User-named path</strong></td><td>A path the user supplies at runtime. It is written as given, and is outside the reach of confinement (<a class="xref" href="#s1.4">§1.4</a>).</td></tr>
+          <tr><td><strong><code>version</code></strong></td><td>The manifest field holding the build's version string. Display metadata only, never a compatibility signal (<a class="xref" href="#s2.5">§2.5</a>).</td></tr>
+        </tbody>
+      </table>
+    </div>
 
     <footer class="footer">
       <p>App Bundle Layout Specification — Version 1.1. Self-contained HTML; no external assets. Save this page and open it offline.</p>
