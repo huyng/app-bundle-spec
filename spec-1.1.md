@@ -32,7 +32,7 @@ Apps are installed within a scope: either system-wide or on a per-user basis.
 <app-root>/
 ├── app.toml          # manifest (required); describes the root
 ├── contents/         # immutable tree (required); replaced wholesale on upgrade
-│   ├── bin/          #   executed or exposed files        (convention)
+│   ├── bin/          #   executed files                  (convention)
 │   ├── lib/          #   libraries and app code           (convention)
 │   └── resources/    #   read-only assets                 (convention)
 ├── data/             # persistent mutable data
@@ -73,13 +73,13 @@ An app writes to two kinds of places: its own, whose location the layout fixes, 
 | Write target | Allowed |
 | --- | --- |
 | a mutable directory in the app root | yes |
-| a mutable directory a supervisor relocated ([§3.1](#s3.1)) | yes |
+| a mutable directory a host relocated ([§3.1](#s3.1)) | yes |
 | a path the user names at runtime | yes |
 | any other path outside the root | no |
 | inside `contents/` | never |
 :::
 
-- An app is **confined** when it writes nothing outside its mutable directories and the paths the user names. Deleting the root then deletes every trace of it, unless a supervisor relocated a mutable directory ([§3.1](#s3.1)).
+- An app is **confined** when it writes nothing outside its mutable directories and the paths the user names. Deleting the root then deletes every trace of it, unless a host relocated a mutable directory ([§3.1](#s3.1)).
 - **A path the user names at runtime is not governed here.** A document passed on the command line, a file chosen in a dialog, a directory an export is written into — these are the user's writes, made at the user's direction, and the discipline allows them. Reopening the document the user last edited is still user-directed. Copying it into a backup directory on a schedule is not: a write the app makes without being asked is not allowed.
 - This describes writes only. Reads, network access, and what the app does with the bytes are outside this section.
 
@@ -108,7 +108,7 @@ The manifest describes the root, so the copy that ships is not always the copy t
 ::: table
 | Field | Type | Description |
 | --- | --- | --- |
-| `entrypoint` | string | Path to the executable, relative to `contents/`. MUST resolve to an executable file. It runs in the foreground ([§5](#s5)). A bundle that declares none is installed and exposed to nothing. |
+| `entrypoint` | string | Path to the executable, relative to `contents/`. MUST resolve to an executable file. It runs in the foreground ([§5](#s5)). A bundle that declares none is installed but has nothing runnable. |
 | `icon` | string | Path to an icon, relative to `contents/`. |
 | `description` | string | Short description. |
 | `license` | string | SPDX license identifier. |
@@ -167,7 +167,7 @@ The contents directory is `<app-root>/contents/`. The manifest is `<app-root>/ap
 
 ### 3.1 Relocated mutable directories
 
-Each mutable directory MAY be relocated individually by the variable that names it ([§3.2](#s3.2)). When used, the app treats the target as its mutable directory. This exists for supervisors that mandate `/var/lib/<id>`, `/var/cache/<id>`, and `/run/<id>`. Relocated directories are invisible to the installer: nothing in the manifest records them, and purging them is the supervisor's business, not the installer's.
+Each mutable directory MAY be relocated individually by the variable that names it ([§3.2](#s3.2)). When used, the app treats the target as its mutable directory. This exists for hosts that mandate `/var/lib/<id>`, `/var/cache/<id>`, and `/run/<id>`. Relocated directories are invisible to the installer: nothing in the manifest records them, and purging them is the host's business, not the installer's.
 
 ### 3.2 Environment variables
 
@@ -183,7 +183,7 @@ These four are the whole of the specification's environment. Each is an absolute
 :::
 
 - A value that is set but empty counts as unset, matching the behaviour of an unset variable in most shells.
-- `$APP_ROOT` is an override, not a requirement: it exists for launchers ([§5.1](#s5.1)), exposure wrappers ([§6.1](#s6.1)), and development harnesses whose tree is not a real one. An app MUST still work with it unset, and MUST fail clearly when it is set to a directory holding no `app.toml`.
+- `$APP_ROOT` is an override, not a requirement: it exists for launchers ([§5.1](#s5.1)) and development harnesses whose tree is not a real one. An app MUST still work with it unset, and MUST fail clearly when it is set to a directory holding no `app.toml`.
 - Nothing else in the environment is this specification's to define. Variables an app invents for its own use are its own; variables a runtime needs are the runtime's, and the launcher sets them ([§5.1](#s5.1)).
 - Environment variables are not a configuration mechanism. Nothing in `app.toml` maps to an environment variable, and nothing here maps to a manifest field. Settings are the app's own business, in `data/` ([§4](#s4)).
 
@@ -209,7 +209,7 @@ The three directories are the complete set of roles that mutable data can play, 
 The fourth quadrant is empty by definition: anything that must survive a restart and cannot be rebuilt is cross-session, not session-scoped. The three roles are therefore the minimum set, and no one of them can be dropped without collapsing an axis. The directories themselves are created only as an app needs them.
 
 - The app creates these on first use. An app that needs only `data/` is conforming and never creates the other two.
-- `run/` MUST be cleared or ignored on every startup, so its persistence across reboot is irrelevant. Supervisors that remove it on stop (e.g. systemd's `RuntimeDirectory=`) provide a stronger guarantee; apps MUST NOT depend on that.
+- `run/` MUST be cleared or ignored on every startup, so its persistence across reboot is irrelevant. Hosts that remove it on stop (e.g. systemd's `RuntimeDirectory=`) provide a stronger guarantee; apps MUST NOT depend on that.
 - `data/` survives reboot, logout, crashes, and upgrades. It is removed only on explicit purge. Its internal structure is the app's own and is opaque to everything else.
 - `cache/` may be deleted at any time without loss of user data. Its internal structure is the app's own.
 
@@ -248,24 +248,20 @@ Installation produces a conforming app root ([§1](#s1)). How the installed file
 
 - The app's files go in `contents/`; the manifest goes at the root. Because manifest paths resolve relative to `contents/` ([§2](#s2)), a source tree whose manifest sits beside its files is installed by moving the manifest up to the root and the rest down into `contents/`. That is the only transform a minimal installer needs.
 - An installer MAY generate fields the source tree could not know. `version` is the usual case: it is normally the revision that was installed ([§2.1](#s2.1)).
-- An installer SHOULD check the result before exposing it: `app.toml` present at the root with valid required fields, and, when one is declared, an executable `entrypoint` inside `contents/`. This is the test of [§11.1](#s11.1), applied to whatever it just built.
+- An installer SHOULD check the result before declaring it installed: `app.toml` present at the root with valid required fields, and, when one is declared, an executable `entrypoint` inside `contents/`. This is the test of [§11.1](#s11.1), applied to whatever it just built.
 - In steady state the root holds `app.toml`, `contents/`, and whichever mutable directories exist. An installer MAY use temporary names in the root while swapping trees ([§7.1](#s7.1)); none may survive a completed install or upgrade.
 - An installer MUST preserve the executable bits and symlinks it finds in the tree, so that a declared `entrypoint` is an executable file inside `contents/`.
 - There are **no install-time scripts**. First-run setup is the app's job.
 - Menu entries and MIME registration are out of scope. Hosts MAY derive them from `app.toml`; nothing requires it.
 
 ::: table mono
-| Scope | App root | Entry exposed as |
-| --- | --- | --- |
-| Per-user | ~/.apps/\<id\>/ | ~/.local/bin/\<entrypoint-name\> symlink or wrapper |
-| System | /opt/apps/\<id\>/ | /usr/local/bin/\<entrypoint-name\> symlink or wrapper |
+| Scope | App root |
+| --- | --- |
+| Per-user | ~/.apps/\<id\>/ |
+| System | /opt/apps/\<id\>/ |
 :::
 
-Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of [§6.1](#s6.1).
-
-### 6.1 Exposure
-
-The exposed entrypoint may be a symlink to `contents/<entrypoint>` or a wrapper script that sets `APP_ROOT` and `exec`s it. A symlink is enough for any conforming entrypoint at either scope, because the entrypoint finds the root from its own location ([§3](#s3)). A wrapper is what a host writes when it has something to add — a relocated mutable directory ([§3.1](#s3.1)), a chosen interpreter — and it then sets `$APP_ROOT` as well.
+Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it.
 
 ## 7. Upgrading
 
@@ -304,19 +300,18 @@ An uninstall removes an installation and nothing else. There are two modes: a pl
 
 An uninstall proceeds in this order:
 
-1. The exposure ([§6.1](#s6.1)), when it points into this root.
-2. `contents/`, `cache/`, and `run/`.
-3. `app.toml`.
-4. `data/`, on purge only.
-5. The root directory itself, once it is empty.
+1. `contents/`, `cache/`, and `run/`.
+2. `app.toml`.
+3. `data/`, on purge only.
+4. The root directory itself, once it is empty.
 
-Each step leaves a state that can be read: nothing is exposed into a tree that has lost its executable, and nothing still enumerates as an installed app once `contents/` is gone. An uninstall interrupted at any point therefore leaves either a working installation or a root that is no longer one.
+Each step leaves a state that can be read: an app is no longer installed once `contents/` is gone, and `data/` is the only thing a plain uninstall leaves behind. An uninstall interrupted at any point therefore leaves either a working installation or a root that is no longer one.
 
 ### 8.2 Rules
 
 - An installer MUST NOT remove a directory that holds no `app.toml`. A missing manifest means there is no installation to remove: a leftover `data/`, a mistyped `<id>`, or an unrelated directory.
 - Purge MUST be an explicit choice. No default uninstall removes `data/`.
-- A relocated mutable directory ([§3.1](#s3.1)) lies outside the root, and removing it is the supervisor's business, not the installer's.
+- A relocated mutable directory ([§3.1](#s3.1)) lies outside the root, and removing it is the host's business, not the installer's.
 - Uninstall does not stop the app. A running process keeps its executable, so `contents/` can be removed while it runs; an interpreted app reads its tree lazily and may fail midway ([§7.4](#s7.4)). That is a consequence of uninstalling a running app, not a condition the installer can prevent.
 - When nothing is installed for `<id>`, an installer SHOULD report that and change nothing.
 
@@ -325,7 +320,7 @@ What a plain uninstall leaves is `data/` alone. That is not an app root: it has 
 ## 9. Relationship to other formats
 
 - **macOS `.app`.** The closest structural analogue, and the source of the name: `Contents/` plays the role of `contents/`, `Info.plist` that of `app.toml`, and `CFBundleIdentifier` that of `id`. macOS keeps mutable data *outside* the bundle (`~/Library/Application Support/<id>/`, `~/Library/Caches/<id>/`) because the bundle is code-signed and the seal covers `Contents/`. This format internalizes mutable data because the root, not the bundle, is the unit: the point is that deleting the root is a complete uninstall. macOS's externalization is why uninstalling a Mac app leaves a dozen directories behind.
-- **FHS / Debian / RPM.** These install a diff against `/` and bake absolute paths at build time, scattering an app across `/usr`, `/etc`, `/var/lib`, `/run`. This format gives each app a single root with the same internal shape at every scope. A system package MAY wrap a conforming app by extracting it intact to `/opt/apps/<id>/`; it MUST NOT split the tree across FHS directories. Where a supervisor mandates FHS placement for mutable data, [§3.1](#s3.1)'s per-directory overrides express it.
+- **FHS / Debian / RPM.** These install a diff against `/` and bake absolute paths at build time, scattering an app across `/usr`, `/etc`, `/var/lib`, `/run`. This format gives each app a single root with the same internal shape at every scope. A system package MAY wrap a conforming app by extracting it intact to `/opt/apps/<id>/`; it MUST NOT split the tree across FHS directories. Where a host mandates FHS placement for mutable data, [§3.1](#s3.1)'s per-directory overrides express it.
 - **systemd's `StateDirectory=`, `CacheDirectory=`, `RuntimeDirectory=`.** The same three roles, externally managed. A generated unit file can express this layout in four lines, and under `ProtectSystem=strict` those directives are also the write whitelist. This is the strongest external argument for the taxonomy. Note that `RuntimeDirectory=` is removed on stop, which is stronger than "cleared on startup."
 - **Homebrew.** A keg is the closest structural match to `contents/`, but keg state lives in a shared prefix `var/`, which is why uninstall leaves data behind and needs per-formula cleanup stanzas. Homebrew also patches absolute paths at install time; this format requires no patching because resolution is runtime-relative.
 - **Nix.** A store path is the purest immutable-tree model, and generation symlinks are a cleaner atomic-swap mechanism than the two-`rename()` procedure here. Nix bakes absolute store paths into binaries, which is what makes trees non-relocatable; this format goes the other way and forbids baked prefixes.
@@ -619,22 +614,21 @@ The words this specification uses in a particular sense, alphabetically. Each en
 | **`contents/`** | The immutable tree that ships. It exists, it is never written at runtime, and it holds the entrypoint ([§1.2](#s1.2)). |
 | **`data/`** | Durable mutable directory. Survives upgrades and machine restarts, and is removed only on purge ([§4](#s4)). |
 | **Entrypoint** | The manifest field naming an executable inside `contents/`, run in the foreground ([§2.2](#s2.2)). |
-| **Exposure** | The symlink or wrapper in a `PATH` directory through which an installed `entrypoint` is invoked ([§6.1](#s6.1)). |
-| **Host** | Software that lists, launches, or draws integration from installed roots: a launcher menu, a file manager, a listing tool. Not the installer ([§11.3](#s11.3)). |
+| **Host** | Software that runs or presents installed roots: a service manager, a launcher menu, a file manager, a listing tool. It launches the `entrypoint`, may relocate mutable directories ([§3.1](#s3.1)), and may draw integration from the manifest. Not the installer ([§11.3](#s11.3)). |
 | **`id`** | Lowercase, dot-separated identifier. It names the app root, is stable across versions, and is self-asserted rather than verified ([§2.3](#s2.3)). |
-| **Installer** | Software that produces a conforming app root and exposes its `entrypoint`. It accepts any source layout ([§6](#s6)). |
+| **Installer** | Software that produces a conforming app root. It accepts any source layout ([§6](#s6)). |
 | **Launcher** | The script an interpreted app ships at `entrypoint`. It finds the root, prepares the runtime, and `exec`s the interpreter ([§5.1](#s5.1)). |
 | **Manifest** | `app.toml`. TOML at the app root, describing the root. Its paths are relative to `contents/` ([§2](#s2)). |
 | **Mutable directory** | One of `data/`, `cache/`, and `run/`: the only places the app writes on its own initiative ([§4](#s4)). |
 | **Purge** | An uninstall that also removes `data/`. A plain uninstall keeps it ([§8](#s8)). |
-| **Relocated mutable directory** | A mutable directory moved outside the app root by a supervisor, through the variable that names it ([§3.1](#s3.1)). |
+| **Relocated mutable directory** | A mutable directory moved outside the app root by a host, through the variable that names it ([§3.1](#s3.1)). |
 | **Root override** | `$APP_ROOT`. It names the app root directly. An override, not a requirement: only needed when the tree being run is not a real one ([§3.2](#s3.2)). |
 | **`run/`** | Session-scoped mutable directory, cleared or ignored on every startup ([§4](#s4)). |
 | **Schema marker** | `data/version`. The app's own data-format version, compared at startup. Unrelated to the manifest's `version` ([§7.3](#s7.3)). |
 | **Scope** | Per-user or system. An installation decision, and not recorded in the manifest ([§1.1](#s1.1)). |
 | **Self-contained** | Dependencies resolved at build time and shipped inside `contents/`, with nothing fetched at startup ([§1.2](#s1.2)). |
 | **Swap** | Replacing `contents/` and `app.toml` as a unit, so that `contents/` is never a mixture of two trees ([§7.1](#s7.1)). |
-| **Uninstall** | Removing an installation: its exposure, `contents/`, `cache/`, `run/`, and `app.toml`. `data/` goes only on purge ([§8](#s8)). |
+| **Uninstall** | Removing an installation: `contents/`, `cache/`, `run/`, and `app.toml`. `data/` goes only on purge ([§8](#s8)). |
 | **User-named path** | A path the user supplies at runtime. It is written as given, and is outside the reach of confinement ([§1.4](#s1.4)). |
 | **`version`** | The manifest field holding the build's version string. Display metadata only, never a compatibility signal ([§2.5](#s2.5)). |
 :::

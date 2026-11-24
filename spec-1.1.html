@@ -539,7 +539,7 @@
     <figure class="tree-figure"><pre class="tree"><span class="t-root">&lt;app-root&gt;/</span>
 ├── app.toml          <span class="t-c"># manifest (required); describes the root</span>
 ├── contents/         <span class="t-c"># immutable tree (required); replaced wholesale on upgrade</span>
-│   ├── bin/          <span class="t-c">#   executed or exposed files        (convention)</span>
+│   ├── bin/          <span class="t-c">#   executed files                  (convention)</span>
 │   ├── lib/          <span class="t-c">#   libraries and app code           (convention)</span>
 │   └── resources/    <span class="t-c">#   read-only assets                 (convention)</span>
 ├── data/             <span class="t-c"># persistent mutable data</span>
@@ -585,7 +585,7 @@
         <thead><tr><th scope="col">Write target</th><th scope="col">Allowed</th></tr></thead>
         <tbody>
           <tr><td>a mutable directory in the app root</td><td>yes</td></tr>
-          <tr><td>a mutable directory a supervisor relocated (<a class="xref" href="#s3.1">§3.1</a>)</td><td>yes</td></tr>
+          <tr><td>a mutable directory a host relocated (<a class="xref" href="#s3.1">§3.1</a>)</td><td>yes</td></tr>
           <tr><td>a path the user names at runtime</td><td>yes</td></tr>
           <tr><td>any other path outside the root</td><td>no</td></tr>
           <tr><td>inside <code>contents/</code></td><td>never</td></tr>
@@ -594,7 +594,7 @@
     </div>
 
     <ul>
-      <li>An app is <strong>confined</strong> when it writes nothing outside its mutable directories and the paths the user names. Deleting the root then deletes every trace of it, unless a supervisor relocated a mutable directory (<a class="xref" href="#s3.1">§3.1</a>).</li>
+      <li>An app is <strong>confined</strong> when it writes nothing outside its mutable directories and the paths the user names. Deleting the root then deletes every trace of it, unless a host relocated a mutable directory (<a class="xref" href="#s3.1">§3.1</a>).</li>
       <li><strong>A path the user names at runtime is not governed here.</strong> A document passed on the command line, a file chosen in a dialog, a directory an export is written into — these are the user's writes, made at the user's direction, and the discipline allows them. Reopening the document the user last edited is still user-directed. Copying it into a backup directory on a schedule is not: a write the app makes without being asked is not allowed.</li>
       <li>This describes writes only. Reads, network access, and what the app does with the bytes are outside this section.</li>
     </ul>
@@ -628,7 +628,7 @@
       <table>
         <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Description</th></tr></thead>
         <tbody>
-          <tr><td><code>entrypoint</code></td><td>string</td><td>Path to the executable, relative to <code>contents/</code>. MUST resolve to an executable file. It runs in the foreground (<a class="xref" href="#s5">§5</a>). A bundle that declares none is installed and exposed to nothing.</td></tr>
+          <tr><td><code>entrypoint</code></td><td>string</td><td>Path to the executable, relative to <code>contents/</code>. MUST resolve to an executable file. It runs in the foreground (<a class="xref" href="#s5">§5</a>). A bundle that declares none is installed but has nothing runnable.</td></tr>
           <tr><td><code>icon</code></td><td>string</td><td>Path to an icon, relative to <code>contents/</code>.</td></tr>
           <tr><td><code>description</code></td><td>string</td><td>Short description.</td></tr>
           <tr><td><code>license</code></td><td>string</td><td>SPDX license identifier.</td></tr>
@@ -688,7 +688,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <h3 id="s3.1">3.1 Relocated mutable directories</h3>
 
-    <p>Each mutable directory MAY be relocated individually by the variable that names it (<a class="xref" href="#s3.2">§3.2</a>). When used, the app treats the target as its mutable directory. This exists for supervisors that mandate <code>/var/lib/&lt;id&gt;</code>, <code>/var/cache/&lt;id&gt;</code>, and <code>/run/&lt;id&gt;</code>. Relocated directories are invisible to the installer: nothing in the manifest records them, and purging them is the supervisor's business, not the installer's.</p>
+    <p>Each mutable directory MAY be relocated individually by the variable that names it (<a class="xref" href="#s3.2">§3.2</a>). When used, the app treats the target as its mutable directory. This exists for hosts that mandate <code>/var/lib/&lt;id&gt;</code>, <code>/var/cache/&lt;id&gt;</code>, and <code>/run/&lt;id&gt;</code>. Relocated directories are invisible to the installer: nothing in the manifest records them, and purging them is the host's business, not the installer's.</p>
 
     <h3 id="s3.2">3.2 Environment variables</h3>
 
@@ -708,7 +708,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ul>
       <li>A value that is set but empty counts as unset, matching the behaviour of an unset variable in most shells.</li>
-      <li><code>$APP_ROOT</code> is an override, not a requirement: it exists for launchers (<a class="xref" href="#s5.1">§5.1</a>), exposure wrappers (<a class="xref" href="#s6.1">§6.1</a>), and development harnesses whose tree is not a real one. An app MUST still work with it unset, and MUST fail clearly when it is set to a directory holding no <code>app.toml</code>.</li>
+      <li><code>$APP_ROOT</code> is an override, not a requirement: it exists for launchers (<a class="xref" href="#s5.1">§5.1</a>) and development harnesses whose tree is not a real one. An app MUST still work with it unset, and MUST fail clearly when it is set to a directory holding no <code>app.toml</code>.</li>
       <li>Nothing else in the environment is this specification's to define. Variables an app invents for its own use are its own; variables a runtime needs are the runtime's, and the launcher sets them (<a class="xref" href="#s5.1">§5.1</a>).</li>
       <li>Environment variables are not a configuration mechanism. Nothing in <code>app.toml</code> maps to an environment variable, and nothing here maps to a manifest field. Settings are the app's own business, in <code>data/</code> (<a class="xref" href="#s4">§4</a>).</li>
     </ul>
@@ -742,7 +742,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ul>
       <li>The app creates these on first use. An app that needs only <code>data/</code> is conforming and never creates the other two.</li>
-      <li><code>run/</code> MUST be cleared or ignored on every startup, so its persistence across reboot is irrelevant. Supervisors that remove it on stop (e.g. systemd's <code>RuntimeDirectory=</code>) provide a stronger guarantee; apps MUST NOT depend on that.</li>
+      <li><code>run/</code> MUST be cleared or ignored on every startup, so its persistence across reboot is irrelevant. Hosts that remove it on stop (e.g. systemd's <code>RuntimeDirectory=</code>) provide a stronger guarantee; apps MUST NOT depend on that.</li>
       <li><code>data/</code> survives reboot, logout, crashes, and upgrades. It is removed only on explicit purge. Its internal structure is the app's own and is opaque to everything else.</li>
       <li><code>cache/</code> may be deleted at any time without loss of user data. Its internal structure is the app's own.</li>
     </ul>
@@ -787,7 +787,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
     <ul>
       <li>The app's files go in <code>contents/</code>; the manifest goes at the root. Because manifest paths resolve relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>), a source tree whose manifest sits beside its files is installed by moving the manifest up to the root and the rest down into <code>contents/</code>. That is the only transform a minimal installer needs.</li>
       <li>An installer MAY generate fields the source tree could not know. <code>version</code> is the usual case: it is normally the revision that was installed (<a class="xref" href="#s2.1">§2.1</a>).</li>
-      <li>An installer SHOULD check the result before exposing it: <code>app.toml</code> present at the root with valid required fields, and, when one is declared, an executable <code>entrypoint</code> inside <code>contents/</code>. This is the test of <a class="xref" href="#s11.1">§11.1</a>, applied to whatever it just built.</li>
+      <li>An installer SHOULD check the result before declaring it installed: <code>app.toml</code> present at the root with valid required fields, and, when one is declared, an executable <code>entrypoint</code> inside <code>contents/</code>. This is the test of <a class="xref" href="#s11.1">§11.1</a>, applied to whatever it just built.</li>
       <li>In steady state the root holds <code>app.toml</code>, <code>contents/</code>, and whichever mutable directories exist. An installer MAY use temporary names in the root while swapping trees (<a class="xref" href="#s7.1">§7.1</a>); none may survive a completed install or upgrade.</li>
       <li>An installer MUST preserve the executable bits and symlinks it finds in the tree, so that a declared <code>entrypoint</code> is an executable file inside <code>contents/</code>.</li>
       <li>There are <strong>no install-time scripts</strong>. First-run setup is the app's job.</li>
@@ -796,19 +796,15 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <div class="table-wrap">
       <table class="mono">
-        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th><th scope="col">Entry exposed as</th></tr></thead>
+        <thead><tr><th scope="col">Scope</th><th scope="col">App root</th></tr></thead>
         <tbody>
-          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td><td>~/.local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
-          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td><td>/usr/local/bin/&lt;entrypoint-name&gt; symlink or wrapper</td></tr>
+          <tr><td>Per-user</td><td>~/.apps/&lt;id&gt;/</td></tr>
+          <tr><td>System</td><td>/opt/apps/&lt;id&gt;/</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p>Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it. At system scope the installer therefore also writes the wrapper of <a class="xref" href="#s6.1">§6.1</a>.</p>
-
-    <h3 id="s6.1">6.1 Exposure</h3>
-
-    <p>The exposed entrypoint may be a symlink to <code>contents/&lt;entrypoint&gt;</code> or a wrapper script that sets <code>APP_ROOT</code> and <code>exec</code>s it. A symlink is enough for any conforming entrypoint at either scope, because the entrypoint finds the root from its own location (<a class="xref" href="#s3">§3</a>). A wrapper is what a host writes when it has something to add — a relocated mutable directory (<a class="xref" href="#s3.1">§3.1</a>), a chosen interpreter — and it then sets <code>$APP_ROOT</code> as well.</p>
+    <p>Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it.</p>
 
     <h2 id="s7">7. Upgrading</h2>
 
@@ -854,21 +850,20 @@ entrypoint = "bin/monitord"</code></pre></figure>
     <p>An uninstall proceeds in this order:</p>
 
     <ol>
-      <li>The exposure (<a class="xref" href="#s6.1">§6.1</a>), when it points into this root.</li>
       <li><code>contents/</code>, <code>cache/</code>, and <code>run/</code>.</li>
       <li><code>app.toml</code>.</li>
       <li><code>data/</code>, on purge only.</li>
       <li>The root directory itself, once it is empty.</li>
     </ol>
 
-    <p>Each step leaves a state that can be read: nothing is exposed into a tree that has lost its executable, and nothing still enumerates as an installed app once <code>contents/</code> is gone. An uninstall interrupted at any point therefore leaves either a working installation or a root that is no longer one.</p>
+    <p>Each step leaves a state that can be read: an app is no longer installed once <code>contents/</code> is gone, and <code>data/</code> is the only thing a plain uninstall leaves behind. An uninstall interrupted at any point therefore leaves either a working installation or a root that is no longer one.</p>
 
     <h3 id="s8.2">8.2 Rules</h3>
 
     <ul>
       <li>An installer MUST NOT remove a directory that holds no <code>app.toml</code>. A missing manifest means there is no installation to remove: a leftover <code>data/</code>, a mistyped <code>&lt;id&gt;</code>, or an unrelated directory.</li>
       <li>Purge MUST be an explicit choice. No default uninstall removes <code>data/</code>.</li>
-      <li>A relocated mutable directory (<a class="xref" href="#s3.1">§3.1</a>) lies outside the root, and removing it is the supervisor's business, not the installer's.</li>
+      <li>A relocated mutable directory (<a class="xref" href="#s3.1">§3.1</a>) lies outside the root, and removing it is the host's business, not the installer's.</li>
       <li>Uninstall does not stop the app. A running process keeps its executable, so <code>contents/</code> can be removed while it runs; an interpreted app reads its tree lazily and may fail midway (<a class="xref" href="#s7.4">§7.4</a>). That is a consequence of uninstalling a running app, not a condition the installer can prevent.</li>
       <li>When nothing is installed for <code>&lt;id&gt;</code>, an installer SHOULD report that and change nothing.</li>
     </ul>
@@ -879,7 +874,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ul>
       <li><strong>macOS <code>.app</code>.</strong> The closest structural analogue, and the source of the name: <code>Contents/</code> plays the role of <code>contents/</code>, <code>Info.plist</code> that of <code>app.toml</code>, and <code>CFBundleIdentifier</code> that of <code>id</code>. macOS keeps mutable data <em>outside</em> the bundle (<code>~/Library/Application Support/&lt;id&gt;/</code>, <code>~/Library/Caches/&lt;id&gt;/</code>) because the bundle is code-signed and the seal covers <code>Contents/</code>. This format internalizes mutable data because the root, not the bundle, is the unit: the point is that deleting the root is a complete uninstall. macOS's externalization is why uninstalling a Mac app leaves a dozen directories behind.</li>
-      <li><strong>FHS / Debian / RPM.</strong> These install a diff against <code>/</code> and bake absolute paths at build time, scattering an app across <code>/usr</code>, <code>/etc</code>, <code>/var/lib</code>, <code>/run</code>. This format gives each app a single root with the same internal shape at every scope. A system package MAY wrap a conforming app by extracting it intact to <code>/opt/apps/&lt;id&gt;/</code>; it MUST NOT split the tree across FHS directories. Where a supervisor mandates FHS placement for mutable data, <a class="xref" href="#s3.1">§3.1</a>'s per-directory overrides express it.</li>
+      <li><strong>FHS / Debian / RPM.</strong> These install a diff against <code>/</code> and bake absolute paths at build time, scattering an app across <code>/usr</code>, <code>/etc</code>, <code>/var/lib</code>, <code>/run</code>. This format gives each app a single root with the same internal shape at every scope. A system package MAY wrap a conforming app by extracting it intact to <code>/opt/apps/&lt;id&gt;/</code>; it MUST NOT split the tree across FHS directories. Where a host mandates FHS placement for mutable data, <a class="xref" href="#s3.1">§3.1</a>'s per-directory overrides express it.</li>
       <li><strong>systemd's <code>StateDirectory=</code>, <code>CacheDirectory=</code>, <code>RuntimeDirectory=</code>.</strong> The same three roles, externally managed. A generated unit file can express this layout in four lines, and under <code>ProtectSystem=strict</code> those directives are also the write whitelist. This is the strongest external argument for the taxonomy. Note that <code>RuntimeDirectory=</code> is removed on stop, which is stronger than "cleared on startup."</li>
       <li><strong>Homebrew.</strong> A keg is the closest structural match to <code>contents/</code>, but keg state lives in a shared prefix <code>var/</code>, which is why uninstall leaves data behind and needs per-formula cleanup stanzas. Homebrew also patches absolute paths at install time; this format requires no patching because resolution is runtime-relative.</li>
       <li><strong>Nix.</strong> A store path is the purest immutable-tree model, and generation symlinks are a cleaner atomic-swap mechanism than the two-<code>rename()</code> procedure here. Nix bakes absolute store paths into binaries, which is what makes trees non-relocatable; this format goes the other way and forbids baked prefixes.</li>
@@ -1163,22 +1158,21 @@ dev: bundle
           <tr><td><strong><code>contents/</code></strong></td><td>The immutable tree that ships. It exists, it is never written at runtime, and it holds the entrypoint (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
           <tr><td><strong><code>data/</code></strong></td><td>Durable mutable directory. Survives upgrades and machine restarts, and is removed only on purge (<a class="xref" href="#s4">§4</a>).</td></tr>
           <tr><td><strong>Entrypoint</strong></td><td>The manifest field naming an executable inside <code>contents/</code>, run in the foreground (<a class="xref" href="#s2.2">§2.2</a>).</td></tr>
-          <tr><td><strong>Exposure</strong></td><td>The symlink or wrapper in a <code>PATH</code> directory through which an installed <code>entrypoint</code> is invoked (<a class="xref" href="#s6.1">§6.1</a>).</td></tr>
-          <tr><td><strong>Host</strong></td><td>Software that lists, launches, or draws integration from installed roots: a launcher menu, a file manager, a listing tool. Not the installer (<a class="xref" href="#s11.3">§11.3</a>).</td></tr>
+          <tr><td><strong>Host</strong></td><td>Software that runs or presents installed roots: a service manager, a launcher menu, a file manager, a listing tool. It launches the <code>entrypoint</code>, may relocate mutable directories (<a class="xref" href="#s3.1">§3.1</a>), and may draw integration from the manifest. Not the installer (<a class="xref" href="#s11.3">§11.3</a>).</td></tr>
           <tr><td><strong><code>id</code></strong></td><td>Lowercase, dot-separated identifier. It names the app root, is stable across versions, and is self-asserted rather than verified (<a class="xref" href="#s2.3">§2.3</a>).</td></tr>
-          <tr><td><strong>Installer</strong></td><td>Software that produces a conforming app root and exposes its <code>entrypoint</code>. It accepts any source layout (<a class="xref" href="#s6">§6</a>).</td></tr>
+          <tr><td><strong>Installer</strong></td><td>Software that produces a conforming app root. It accepts any source layout (<a class="xref" href="#s6">§6</a>).</td></tr>
           <tr><td><strong>Launcher</strong></td><td>The script an interpreted app ships at <code>entrypoint</code>. It finds the root, prepares the runtime, and <code>exec</code>s the interpreter (<a class="xref" href="#s5.1">§5.1</a>).</td></tr>
           <tr><td><strong>Manifest</strong></td><td><code>app.toml</code>. TOML at the app root, describing the root. Its paths are relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>).</td></tr>
           <tr><td><strong>Mutable directory</strong></td><td>One of <code>data/</code>, <code>cache/</code>, and <code>run/</code>: the only places the app writes on its own initiative (<a class="xref" href="#s4">§4</a>).</td></tr>
           <tr><td><strong>Purge</strong></td><td>An uninstall that also removes <code>data/</code>. A plain uninstall keeps it (<a class="xref" href="#s8">§8</a>).</td></tr>
-          <tr><td><strong>Relocated mutable directory</strong></td><td>A mutable directory moved outside the app root by a supervisor, through the variable that names it (<a class="xref" href="#s3.1">§3.1</a>).</td></tr>
+          <tr><td><strong>Relocated mutable directory</strong></td><td>A mutable directory moved outside the app root by a host, through the variable that names it (<a class="xref" href="#s3.1">§3.1</a>).</td></tr>
           <tr><td><strong>Root override</strong></td><td><code>$APP_ROOT</code>. It names the app root directly. An override, not a requirement: only needed when the tree being run is not a real one (<a class="xref" href="#s3.2">§3.2</a>).</td></tr>
           <tr><td><strong><code>run/</code></strong></td><td>Session-scoped mutable directory, cleared or ignored on every startup (<a class="xref" href="#s4">§4</a>).</td></tr>
           <tr><td><strong>Schema marker</strong></td><td><code>data/version</code>. The app's own data-format version, compared at startup. Unrelated to the manifest's <code>version</code> (<a class="xref" href="#s7.3">§7.3</a>).</td></tr>
           <tr><td><strong>Scope</strong></td><td>Per-user or system. An installation decision, and not recorded in the manifest (<a class="xref" href="#s1.1">§1.1</a>).</td></tr>
           <tr><td><strong>Self-contained</strong></td><td>Dependencies resolved at build time and shipped inside <code>contents/</code>, with nothing fetched at startup (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
           <tr><td><strong>Swap</strong></td><td>Replacing <code>contents/</code> and <code>app.toml</code> as a unit, so that <code>contents/</code> is never a mixture of two trees (<a class="xref" href="#s7.1">§7.1</a>).</td></tr>
-          <tr><td><strong>Uninstall</strong></td><td>Removing an installation: its exposure, <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> goes only on purge (<a class="xref" href="#s8">§8</a>).</td></tr>
+          <tr><td><strong>Uninstall</strong></td><td>Removing an installation: <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> goes only on purge (<a class="xref" href="#s8">§8</a>).</td></tr>
           <tr><td><strong>User-named path</strong></td><td>A path the user supplies at runtime. It is written as given, and is outside the reach of confinement (<a class="xref" href="#s1.4">§1.4</a>).</td></tr>
           <tr><td><strong><code>version</code></strong></td><td>The manifest field holding the build's version string. Display metadata only, never a compatibility signal (<a class="xref" href="#s2.5">§2.5</a>).</td></tr>
         </tbody>
