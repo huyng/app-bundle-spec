@@ -545,7 +545,8 @@
 ├── data/             <span class="t-c"># persistent mutable data</span>
 │   └── config.json   <span class="t-c">#   settings                         (convention)</span>
 ├── cache/            <span class="t-c"># regenerable data</span>
-└── run/              <span class="t-c"># ephemeral; cleared or ignored on startup</span></pre></figure>
+├── run/              <span class="t-c"># ephemeral; cleared or ignored on startup</span>
+└── receipt.toml      <span class="t-c"># install record (optional); written by the installer</span></pre></figure>
 
     <div class="note">
       <p><strong>The interiors of <code>contents/</code> and <code>data/</code> are conventions, not requirements.</strong> The files shown under each are only examples of a typical shape. Three facts about <code>contents/</code> are normative: it exists, nothing in it is written at runtime, and if <code>app.toml</code> declares an <code>entrypoint</code> that path resolves to an executable file inside it. The <code>bin/</code>, <code>lib/</code>, <code>resources/</code> split is the recommended shape for bundles that need it, and nothing outside the app may depend on it.</p>
@@ -555,6 +556,7 @@
       <li><code>app.toml</code> is at the root because it describes the root. It is replaced on upgrade (<a class="xref" href="#s7">§7</a>) and is never written at runtime.</li>
       <li><code>contents/</code> is the tree that ships. It is never modified at runtime, and it is self-contained: dependencies are resolved when the tree is built and shipped inside it, and nothing is fetched when the app starts. A tree that bakes an absolute install prefix into its files is non-conforming. A launcher may compute absolute paths at runtime (<a class="xref" href="#s5.1">§5.1</a>); a build may not write them in.</li>
       <li><code>data/</code>, <code>cache/</code>, and <code>run/</code> are created by the app on first use.</li>
+      <li><code>receipt.toml</code> is written by the installer and ignored by the app (<a class="xref" href="#s6.1">§6.1</a>). It is not part of any bundle, and an app root is conforming with or without it.</li>
       <li>The names under <code>data/</code> are examples, not a layout. An app that keeps one SQLite file, a directory per document, or nothing at all conforms equally; only the directory itself and who may write to it are normative.</li>
     </ul>
 
@@ -566,6 +568,7 @@
         <tbody>
           <tr><td>root</td><td>0700</td><td>0750, owned by the service user</td></tr>
           <tr><td>app.toml</td><td>0644</td><td>0644</td></tr>
+          <tr><td>receipt.toml</td><td>0644</td><td>0644</td></tr>
           <tr><td>contents/</td><td>0755, read-only at runtime</td><td>0755, read-only at runtime</td></tr>
           <tr><td>data/</td><td>0700</td><td>0750</td></tr>
           <tr><td>cache/</td><td>0700</td><td>0750</td></tr>
@@ -806,6 +809,40 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <p>Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it.</p>
 
+    <h3 id="s6.1">6.1 Install state (<code>receipt.toml</code>)</h3>
+
+    <p>An installed root MAY hold <code>receipt.toml</code>, a record of how that installation was made. It is the installer's file: written after the tree is in place, opaque to everything else, and never part of a bundle.</p>
+
+    <p>The two files at the root therefore have different owners and different lifetimes. <code>app.toml</code> is authored, ships inside bundles, and is replaced on upgrade (<a class="xref" href="#s7.1">§7.1</a>). <code>receipt.toml</code> is generated, exists only in an installed root, and describes an installation rather than an app.</p>
+
+    <p>The advisory shape, showing the questions a receipt answers — where it came from, what was fetched, and who installed it:</p>
+
+    <figure class="code" data-lang="toml"><pre><code>[source]
+kind = "release"                                   # release, repo, or archive
+url  = "https://github.com/neovim/neovim/releases/tag/v0.12.2"
+ref  = "v0.12.2"                                   # tag, or commit for kind = repo
+
+[artifact]
+name        = "nvim-linux-x86_64.tar.gz"
+sha256      = "9f2c…"
+fetched_at  = "2025-11-24T09:14:02Z"
+
+[installer]
+name    = "zap"
+version = "0.1.0"
+at      = "2025-11-24T09:14:03Z"</code></pre></figure>
+
+    <ul>
+      <li>A <strong>bundle MUST NOT contain</strong> <code>receipt.toml</code>. A bundle is <code>app.toml</code> and <code>contents/</code> (<a class="xref" href="#s1.2">§1.2</a>), and an installer MUST reject a tree carrying one, exactly as it rejects any other unexpected entry at the root.</li>
+      <li>The <strong>app MUST NOT read or write it.</strong> It is not the app's state; <code>data/</code> is (<a class="xref" href="#s4">§4</a>).</li>
+      <li>No key is required and unknown keys are ignored, matching <a class="xref" href="#s2">§2</a>. The tables above describe what a receipt is for, not a schema to conform to.</li>
+      <li>An installer MUST <strong>replace</strong> it on upgrade rather than edit it in place, and MUST NOT delete it while leaving the old installation in place.</li>
+      <li>Uninstall removes it, on every mode (<a class="xref" href="#s8.1">§8.1</a>). It describes an installation that no longer exists.</li>
+      <li>Like <code>id</code>, a receipt is <strong>self-asserted and unverified</strong> (<a class="xref" href="#s2.3">§2.3</a>). It records what the installer did, not a claim about what the bundle contains, and nothing may treat it as proof of authorship or integrity. An installer that needs to verify what it downloaded records the hash so it can compare a later fetch against it; that comparison is the installer's business, not a conformance question.</li>
+    </ul>
+
+    <p>The specification defines the file and the rules above. What an installer puts in it, and what it does with that information later — re-fetching a source, checking a hash, deciding whether an update exists — is <a class="xref" href="#s11.3">§11.3</a> territory.</p>
+
     <h2 id="s7">7. Upgrading</h2>
 
     <p>An upgrade replaces <code>contents/</code> and <code>app.toml</code> and MUST NOT modify <code>data/</code>, <code>cache/</code>, or <code>run/</code>.</p>
@@ -821,6 +858,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
     <ul>
       <li>The installer MUST refuse to upgrade when the new manifest's <code>id</code> differs from the directory name.</li>
       <li>The installer MUST NOT touch <code>data/</code>, <code>cache/</code>, or <code>run/</code>. Data migration is the app's responsibility.</li>
+      <li>The installer MUST replace <code>receipt.toml</code> with one describing the new installation (<a class="xref" href="#s6.1">§6.1</a>). It is the installer's own file, so this is the one write an upgrade makes outside <code>contents/</code> and <code>app.toml</code>.</li>
       <li>The installer MUST NOT restart daemons. Daemons pick up the new tree when supervision restarts them.</li>
     </ul>
 
@@ -851,7 +889,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
 
     <ol>
       <li><code>contents/</code>, <code>cache/</code>, and <code>run/</code>.</li>
-      <li><code>app.toml</code>.</li>
+      <li><code>app.toml</code> and <code>receipt.toml</code>.</li>
       <li><code>data/</code>, on purge only.</li>
       <li>The root directory itself, once it is empty.</li>
     </ol>
@@ -865,6 +903,7 @@ entrypoint = "bin/monitord"</code></pre></figure>
       <li>Purge MUST be an explicit choice. No default uninstall removes <code>data/</code>.</li>
       <li>A relocated mutable directory (<a class="xref" href="#s3.1">§3.1</a>) lies outside the root, and removing it is the host's business, not the installer's.</li>
       <li>Uninstall does not stop the app. A running process keeps its executable, so <code>contents/</code> can be removed while it runs; an interpreted app reads its tree lazily and may fail midway (<a class="xref" href="#s7.4">§7.4</a>). That is a consequence of uninstalling a running app, not a condition the installer can prevent.</li>
+      <li>Uninstall removes <code>receipt.toml</code> in both modes (<a class="xref" href="#s6.1">§6.1</a>). It describes an installation, so keeping it after the installation is gone would leave a record of something that no longer exists.</li>
       <li>When nothing is installed for <code>&lt;id&gt;</code>, an installer SHOULD report that and change nothing.</li>
     </ul>
 
@@ -1165,6 +1204,7 @@ dev: bundle
           <tr><td><strong>Manifest</strong></td><td><code>app.toml</code>. TOML at the app root, describing the root. Its paths are relative to <code>contents/</code> (<a class="xref" href="#s2">§2</a>).</td></tr>
           <tr><td><strong>Mutable directory</strong></td><td>One of <code>data/</code>, <code>cache/</code>, and <code>run/</code>: the only places the app writes on its own initiative (<a class="xref" href="#s4">§4</a>).</td></tr>
           <tr><td><strong>Purge</strong></td><td>An uninstall that also removes <code>data/</code>. A plain uninstall keeps it (<a class="xref" href="#s8">§8</a>).</td></tr>
+          <tr><td><strong>Receipt</strong></td><td><code>receipt.toml</code>. The installer's record of how an installation was made: source, artifact, and installer. Not shipped, not read by the app, and removed with the installation (<a class="xref" href="#s6.1">§6.1</a>).</td></tr>
           <tr><td><strong>Relocated mutable directory</strong></td><td>A mutable directory moved outside the app root by a host, through the variable that names it (<a class="xref" href="#s3.1">§3.1</a>).</td></tr>
           <tr><td><strong>Root override</strong></td><td><code>$APP_ROOT</code>. It names the app root directly. An override, not a requirement: only needed when the tree being run is not a real one (<a class="xref" href="#s3.2">§3.2</a>).</td></tr>
           <tr><td><strong><code>run/</code></strong></td><td>Session-scoped mutable directory, cleared or ignored on every startup (<a class="xref" href="#s4">§4</a>).</td></tr>
@@ -1172,7 +1212,7 @@ dev: bundle
           <tr><td><strong>Scope</strong></td><td>Per-user or system. An installation decision, and not recorded in the manifest (<a class="xref" href="#s1.1">§1.1</a>).</td></tr>
           <tr><td><strong>Self-contained</strong></td><td>Dependencies resolved at build time and shipped inside <code>contents/</code>, with nothing fetched at startup (<a class="xref" href="#s1.2">§1.2</a>).</td></tr>
           <tr><td><strong>Swap</strong></td><td>Replacing <code>contents/</code> and <code>app.toml</code> as a unit, so that <code>contents/</code> is never a mixture of two trees (<a class="xref" href="#s7.1">§7.1</a>).</td></tr>
-          <tr><td><strong>Uninstall</strong></td><td>Removing an installation: <code>contents/</code>, <code>cache/</code>, <code>run/</code>, and <code>app.toml</code>. <code>data/</code> goes only on purge (<a class="xref" href="#s8">§8</a>).</td></tr>
+          <tr><td><strong>Uninstall</strong></td><td>Removing an installation: <code>contents/</code>, <code>cache/</code>, <code>run/</code>, <code>app.toml</code>, and <code>receipt.toml</code>. <code>data/</code> goes only on purge (<a class="xref" href="#s8">§8</a>).</td></tr>
           <tr><td><strong>User-named path</strong></td><td>A path the user supplies at runtime. It is written as given, and is outside the reach of confinement (<a class="xref" href="#s1.4">§1.4</a>).</td></tr>
           <tr><td><strong><code>version</code></strong></td><td>The manifest field holding the build's version string. Display metadata only, never a compatibility signal (<a class="xref" href="#s2.5">§2.5</a>).</td></tr>
         </tbody>

@@ -38,7 +38,8 @@ Apps are installed within a scope: either system-wide or on a per-user basis.
 ├── data/             # persistent mutable data
 │   └── config.json   #   settings                         (convention)
 ├── cache/            # regenerable data
-└── run/              # ephemeral; cleared or ignored on startup
+├── run/              # ephemeral; cleared or ignored on startup
+└── receipt.toml      # install record (optional); written by the installer
 ```
 
 ::: note
@@ -48,6 +49,7 @@ Apps are installed within a scope: either system-wide or on a per-user basis.
 - `app.toml` is at the root because it describes the root. It is replaced on upgrade ([§7](#s7)) and is never written at runtime.
 - `contents/` is the tree that ships. It is never modified at runtime, and it is self-contained: dependencies are resolved when the tree is built and shipped inside it, and nothing is fetched when the app starts. A tree that bakes an absolute install prefix into its files is non-conforming. A launcher may compute absolute paths at runtime ([§5.1](#s5.1)); a build may not write them in.
 - `data/`, `cache/`, and `run/` are created by the app on first use.
+- `receipt.toml` is written by the installer and ignored by the app ([§6.1](#s6.1)). It is not part of any bundle, and an app root is conforming with or without it.
 - The names under `data/` are examples, not a layout. An app that keeps one SQLite file, a directory per document, or nothing at all conforms equally; only the directory itself and who may write to it are normative.
 
 ### 1.3 Modes
@@ -57,6 +59,7 @@ Apps are installed within a scope: either system-wide or on a per-user basis.
 | --- | --- | --- |
 | root | 0700 | 0750, owned by the service user |
 | app.toml | 0644 | 0644 |
+| receipt.toml | 0644 | 0644 |
 | contents/ | 0755, read-only at runtime | 0755, read-only at runtime |
 | data/ | 0700 | 0750 |
 | cache/ | 0700 | 0750 |
@@ -263,6 +266,40 @@ Installation produces a conforming app root ([§1](#s1)). How the installed file
 
 Scope is an installation decision, not a property of the bundle. The same tree installs at either scope; the installer takes the scope from the target it was given, and the manifest says nothing about it.
 
+### 6.1 Install state (`receipt.toml`)
+
+An installed root MAY hold `receipt.toml`, a record of how that installation was made. It is the installer's file: written after the tree is in place, opaque to everything else, and never part of a bundle.
+
+The two files at the root therefore have different owners and different lifetimes. `app.toml` is authored, ships inside bundles, and is replaced on upgrade ([§7.1](#s7.1)). `receipt.toml` is generated, exists only in an installed root, and describes an installation rather than an app.
+
+The advisory shape, showing the questions a receipt answers — where it came from, what was fetched, and who installed it:
+
+```toml
+[source]
+kind = "release"                                   # release, repo, or archive
+url  = "https://github.com/neovim/neovim/releases/tag/v0.12.2"
+ref  = "v0.12.2"                                   # tag, or commit for kind = repo
+
+[artifact]
+name        = "nvim-linux-x86_64.tar.gz"
+sha256      = "9f2c…"
+fetched_at  = "2025-11-24T09:14:02Z"
+
+[installer]
+name    = "zap"
+version = "0.1.0"
+at      = "2025-11-24T09:14:03Z"
+```
+
+- A **bundle MUST NOT contain** `receipt.toml`. A bundle is `app.toml` and `contents/` ([§1.2](#s1.2)), and an installer MUST reject a tree carrying one, exactly as it rejects any other unexpected entry at the root.
+- The **app MUST NOT read or write it.** It is not the app's state; `data/` is ([§4](#s4)).
+- No key is required and unknown keys are ignored, matching [§2](#s2). The tables above describe what a receipt is for, not a schema to conform to.
+- An installer MUST **replace** it on upgrade rather than edit it in place, and MUST NOT delete it while leaving the old installation in place.
+- Uninstall removes it, on every mode ([§8.1](#s8.1)). It describes an installation that no longer exists.
+- Like `id`, a receipt is **self-asserted and unverified** ([§2.3](#s2.3)). It records what the installer did, not a claim about what the bundle contains, and nothing may treat it as proof of authorship or integrity. An installer that needs to verify what it downloaded records the hash so it can compare a later fetch against it; that comparison is the installer's business, not a conformance question.
+
+The specification defines the file and the rules above. What an installer puts in it, and what it does with that information later — re-fetching a source, checking a hash, deciding whether an update exists — is [§11.3](#s11.3) territory.
+
 ## 7. Upgrading
 
 An upgrade replaces `contents/` and `app.toml` and MUST NOT modify `data/`, `cache/`, or `run/`.
@@ -277,6 +314,7 @@ A swap that fails leaves the previous tree in place.
 
 - The installer MUST refuse to upgrade when the new manifest's `id` differs from the directory name.
 - The installer MUST NOT touch `data/`, `cache/`, or `run/`. Data migration is the app's responsibility.
+- The installer MUST replace `receipt.toml` with one describing the new installation ([§6.1](#s6.1)). It is the installer's own file, so this is the one write an upgrade makes outside `contents/` and `app.toml`.
 - The installer MUST NOT restart daemons. Daemons pick up the new tree when supervision restarts them.
 
 ### 7.3 Data migration
@@ -301,7 +339,7 @@ An uninstall removes an installation and nothing else. There are two modes: a pl
 An uninstall proceeds in this order:
 
 1. `contents/`, `cache/`, and `run/`.
-2. `app.toml`.
+2. `app.toml` and `receipt.toml`.
 3. `data/`, on purge only.
 4. The root directory itself, once it is empty.
 
@@ -313,6 +351,7 @@ Each step leaves a state that can be read: an app is no longer installed once `c
 - Purge MUST be an explicit choice. No default uninstall removes `data/`.
 - A relocated mutable directory ([§3.1](#s3.1)) lies outside the root, and removing it is the host's business, not the installer's.
 - Uninstall does not stop the app. A running process keeps its executable, so `contents/` can be removed while it runs; an interpreted app reads its tree lazily and may fail midway ([§7.4](#s7.4)). That is a consequence of uninstalling a running app, not a condition the installer can prevent.
+- Uninstall removes `receipt.toml` in both modes ([§6.1](#s6.1)). It describes an installation, so keeping it after the installation is gone would leave a record of something that no longer exists.
 - When nothing is installed for `<id>`, an installer SHOULD report that and change nothing.
 
 What a plain uninstall leaves is `data/` alone. That is not an app root: it has no manifest, so a host that enumerates installed apps does not see it, and installing that `<id>` again adopts it.
@@ -621,6 +660,7 @@ The words this specification uses in a particular sense, alphabetically. Each en
 | **Manifest** | `app.toml`. TOML at the app root, describing the root. Its paths are relative to `contents/` ([§2](#s2)). |
 | **Mutable directory** | One of `data/`, `cache/`, and `run/`: the only places the app writes on its own initiative ([§4](#s4)). |
 | **Purge** | An uninstall that also removes `data/`. A plain uninstall keeps it ([§8](#s8)). |
+| **Receipt** | `receipt.toml`. The installer's record of how an installation was made: source, artifact, and installer. Not shipped, not read by the app, and removed with the installation ([§6.1](#s6.1)). |
 | **Relocated mutable directory** | A mutable directory moved outside the app root by a host, through the variable that names it ([§3.1](#s3.1)). |
 | **Root override** | `$APP_ROOT`. It names the app root directly. An override, not a requirement: only needed when the tree being run is not a real one ([§3.2](#s3.2)). |
 | **`run/`** | Session-scoped mutable directory, cleared or ignored on every startup ([§4](#s4)). |
@@ -628,7 +668,7 @@ The words this specification uses in a particular sense, alphabetically. Each en
 | **Scope** | Per-user or system. An installation decision, and not recorded in the manifest ([§1.1](#s1.1)). |
 | **Self-contained** | Dependencies resolved at build time and shipped inside `contents/`, with nothing fetched at startup ([§1.2](#s1.2)). |
 | **Swap** | Replacing `contents/` and `app.toml` as a unit, so that `contents/` is never a mixture of two trees ([§7.1](#s7.1)). |
-| **Uninstall** | Removing an installation: `contents/`, `cache/`, `run/`, and `app.toml`. `data/` goes only on purge ([§8](#s8)). |
+| **Uninstall** | Removing an installation: `contents/`, `cache/`, `run/`, `app.toml`, and `receipt.toml`. `data/` goes only on purge ([§8](#s8)). |
 | **User-named path** | A path the user supplies at runtime. It is written as given, and is outside the reach of confinement ([§1.4](#s1.4)). |
 | **`version`** | The manifest field holding the build's version string. Display metadata only, never a compatibility signal ([§2.5](#s2.5)). |
 :::
